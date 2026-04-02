@@ -395,10 +395,47 @@ html, body {
 }
 .toast-wrap.show { opacity:1; transform:translateX(-50%) translateY(0); }
 
+/* ══ 모바일 실기기: phone-frame 제거 ══ */
+@media (max-width: 480px) {
+  html, body {
+    background: var(--c-bg);
+    background-image: none;
+    padding: 0;
+    align-items: stretch;
+    justify-content: stretch;
+  }
+  .phone-frame {
+    width: 100%;
+    height: 100vh;
+    height: 100dvh;
+    border-radius: 0;
+    padding: 0;
+    box-shadow: none;
+    background: transparent;
+  }
+  .phone-screen {
+    border-radius: 0;
+  }
+  .dynamic-island {
+    display: none;
+  }
+  .status-bar {
+    height: env(safe-area-inset-top, 20px);
+    padding: 0;
+  }
+}
+
 /* ══ SIGNUP SHEET ══ */
 </style>
 <!-- ★ 카카오 SDK (CDN 자동 로드) -->
 <script>
+  // 전역 함수 미리 정의 (module 로드 전 클릭 대비)
+  function go(n) { if(window._goTab) window._goTab(n); }
+  function goTab(n) { if(window._goTab) window._goTab(n); }
+  function openSheet(id) { if(window._openSheet) window._openSheet(id); else { const el=document.getElementById(id); if(el) el.style.display='flex'; } }
+  function closeSheet(id) { if(window._closeSheet) window._closeSheet(id); else { const el=document.getElementById(id); if(el) el.style.display='none'; } }
+  function toast(msg) { if(window._toast) window._toast(msg); else console.log(msg); }
+
   function _loadKakaoSDK(cb) {
     if (window.Kakao && Kakao.isInitialized()) { cb(); return; }
     if (window.Kakao && !Kakao.isInitialized()) { Kakao.init('edce575f26fc7260740cabd11f695bc8'); cb(); return; }
@@ -411,7 +448,7 @@ html, body {
   }
 </script>
 <!-- ★ Firebase SDK ★ -->
-<script type="module">
+<script type="module" defer>
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
   import { getFirestore, collection, addDoc, getDocs, doc, getDoc, setDoc, updateDoc, onSnapshot, query, orderBy, serverTimestamp, writeBatch } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
   import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
@@ -451,11 +488,11 @@ html, body {
           window._userRole = role;
           if (role === 'admin') {
             const tab = document.getElementById('tab-admin');
-            if (tab) tab.style.display = 'flex';
+            if (tab) tab.classList.add('show-tab');
           }
           if (role === 'facility') {
             const tab = document.getElementById('tab-facility');
-            if (tab) tab.style.display = 'flex';
+            if (tab) tab.classList.add('show-tab');
           }
         }
       } catch(e) { console.log('역할 확인 오류:', e); }
@@ -1514,7 +1551,7 @@ html, body {
               <div style="background:#FEF9EC;border:1px solid #FDE68A;border-radius:14px;padding:14px 16px;margin-bottom:14px">
                 <div style="font-size:11px;font-weight:700;color:#92400E;margin-bottom:6px">🔑 관리자 로그인 정보</div>
                 <div style="font-size:12px;color:#78350F;line-height:1.8">
-                  이메일: <b><a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="5d3134302e343329656b6a1d3a303c3431733e3230">[email&#160;protected]</a></b><br>
+                  이메일: <b>admin@ansimcare.kr</b><br>
                   비밀번호: <b>ansim2024!</b><br>
                   <span style="font-size:10px;color:#B45309">※ 실제 서비스 전 반드시 변경하세요</span>
                 </div>
@@ -1770,14 +1807,14 @@ html, body {
           <div style="background:#F0FDF4;border-radius:10px;padding:12px;margin-bottom:14px;font-size:12px;color:#4A6358">
             • 개인정보 열람, 수정, 삭제 요청 가능<br>
             • 회원 탈퇴 시 즉시 삭제 처리<br>
-            • 문의: <a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="315d585c42585f4509070671565c50585d1f525e5c">[email&#160;protected]</a>
+            • 문의: admin@ansimcare.kr
           </div>
 
           <div style="font-weight:700;color:#2D6A4F;margin-bottom:6px">7. 개인정보보호책임자</div>
           <div style="background:#F0FDF4;border-radius:10px;padding:12px;margin-bottom:14px;font-size:12px;color:#4A6358">
             • 서비스명: 안심케어<br>
             • 담당자: 안심케어 운영팀<br>
-            • 이메일: <a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="8ce0e5e1ffe5e2f8b4babbccebe1ede5e0a2efe3e1">[email&#160;protected]</a><br>
+            • 이메일: admin@ansimcare.kr<br>
             • 서비스 지역: 광주·전남·전북
           </div>
 
@@ -1828,87 +1865,33 @@ html, body {
       </div>
     </div>
 
-    <!-- ████ 관리자 기관 수정 시트 ████ -->
+        <!-- 관리자 기관 수정 시트 -->
     <div class="sheet-backdrop" id="admin-edit-sheet" onclick="sheetClose(event,'admin-edit-sheet')">
       <div class="bottom-sheet" style="max-height:90vh;overflow-y:auto">
         <div class="sheet-handle"></div>
         <button class="sheet-close" onclick="closeSheet('admin-edit-sheet')">✕</button>
-        <div style="font-family:'Noto Serif KR',serif;font-size:17px;font-weight:700;color:#1B2F23;margin-bottom:4px">✏️ 기관 정보 수정</div>
+        <div style="font-size:17px;font-weight:700;color:#1B2F23;margin-bottom:4px">✏️ 기관 정보 수정</div>
         <div id="admin-edit-facname" style="font-size:12px;color:#7A9B8A;margin-bottom:16px"></div>
-        <div class="form-group">
-          <label class="form-label">전화번호</label>
-          <input class="form-input" id="edit-tel" type="tel" placeholder="예) 062-000-0000">
-        </div>
-        <div class="form-group">
-          <label class="form-label">평가등급</label>
+        <div class="form-group"><label class="form-label">전화번호</label><input class="form-input" id="edit-tel" type="tel" placeholder="062-000-0000"></div>
+        <div class="form-group"><label class="form-label">평가등급</label>
           <select class="form-input form-select" id="edit-grade">
-            <option value="-">미평가</option>
-            <option value="A등급">A등급</option>
-            <option value="B등급">B등급</option>
-            <option value="C등급">C등급</option>
-            <option value="D등급">D등급</option>
-            <option value="E등급">E등급</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label class="form-label">정원</label>
-          <input class="form-input" id="edit-cap" type="number" placeholder="예) 30">
-        </div>
-        <div class="form-group">
-          <label class="form-label">현재 입소인원</label>
-          <input class="form-input" id="edit-cur" type="number" placeholder="예) 25">
-        </div>
-        <div class="form-group">
-          <label class="form-label">설립연도</label>
-          <input class="form-input" id="edit-founded" placeholder="예) 2015년">
-        </div>
-        <div class="form-group">
-          <label class="form-label">시설 소개 (PR글)</label>
-          <textarea class="form-input" id="edit-pr" rows="4" placeholder="시설 특징, 전문 서비스, 위치 등" style="resize:none;height:100px"></textarea>
-        </div>
-        <div class="form-group">
-          <label class="form-label">태그 (쉼표로 구분)</label>
-          <input class="form-input" id="edit-tags" placeholder="예) 치매전문, 재활치료">
-        </div>
-        <div class="form-group">
-          <label class="form-label">사진 URL</label>
-          <input class="form-input" id="edit-photo" placeholder="구글 드라이브 공유링크 등">
-          <div style="font-size:11px;color:#AEC5B7;margin-top:4px">💡 구글 드라이브에 사진 올리고 공유링크 붙여넣기</div>
-        </div>
+            <option value="-">미평가</option><option value="A등급">A등급</option><option value="B등급">B등급</option><option value="C등급">C등급</option><option value="D등급">D등급</option><option value="E등급">E등급</option>
+          </select></div>
+        <div class="form-group"><label class="form-label">정원</label><input class="form-input" id="edit-cap" type="number" placeholder="30"></div>
+        <div class="form-group"><label class="form-label">현재 입소인원</label><input class="form-input" id="edit-cur" type="number" placeholder="25"></div>
+        <div class="form-group"><label class="form-label">설립연도</label><input class="form-input" id="edit-founded" placeholder="2015년"></div>
+        <div class="form-group"><label class="form-label">시설 소개 (PR글)</label><textarea class="form-input" id="edit-pr" style="height:100px;resize:none" placeholder="시설 특징, 전문 서비스 등"></textarea></div>
+        <div class="form-group"><label class="form-label">태그 (쉼표로 구분)</label><input class="form-input" id="edit-tags" placeholder="치매전문, 재활치료"></div>
+        <div class="form-group"><label class="form-label">사진 URL</label><input class="form-input" id="edit-photo" placeholder="구글 드라이브 공유링크">
+          <div style="font-size:11px;color:#AEC5B7;margin-top:4px">💡 구글 드라이브에 사진 올리고 공유링크 붙여넣기</div></div>
         <div style="display:flex;gap:8px;margin-top:8px">
           <button class="btn btn-ghost" onclick="closeSheet('admin-edit-sheet')" style="flex:1">취소</button>
           <button class="btn btn-primary" onclick="saveAdminEdit()" style="flex:2">💾 저장</button>
         </div>
       </div>
     </div>
-    <!-- ████ 스플래시 화면 ████ -->
-    <div id="splash-screen" style="position:absolute;inset:0;z-index:999;background:linear-gradient(160deg,#1B4332 0%,#2D6A4F 55%,#40916C 100%);display:none;flex-direction:column;align-items:center;justify-content:center;border-radius:42px;">
-      <div style="text-align:center">
-        <!-- 로고 애니메이션 -->
-        <div id="splash-logo" style="opacity:0;transform:scale(.6);transition:all .6s cubic-bezier(.34,1.56,.64,1)">
-          <div style="width:90px;height:90px;border-radius:28px;background:rgba(255,255,255,.15);backdrop-filter:blur(10px);display:flex;align-items:center;justify-content:center;margin:0 auto 20px;box-shadow:0 8px 32px rgba(0,0,0,.2)">
-            <svg width="52" height="52" viewBox="0 0 52 52" fill="none">
-              <path d="M26 4C14 4 4 14 4 26s10 22 22 22 22-10 22-22S38 4 26 4z" fill="rgba(255,255,255,.2)"/>
-              <path d="M26 10c-2.5 0-4.5 2-4.5 4.5S23.5 19 26 19s4.5-2 4.5-4.5S28.5 10 26 10z" fill="#fff"/>
-              <path d="M16 24c0-5.5 4.5-10 10-10s10 4.5 10 10v14H16V24z" fill="#fff" opacity=".9"/>
-              <path d="M20 38v-8a2 2 0 014 0v8M28 38v-8a2 2 0 014 0v8" fill="#2D6A4F"/>
-            </svg>
-          </div>
-          <div style="font-family:'Noto Serif KR',serif;font-size:34px;font-weight:700;color:#fff;letter-spacing:-1px;margin-bottom:6px">안심<span style="color:#52B788">케어</span></div>
-          <div style="font-size:12px;color:rgba(255,255,255,.6);letter-spacing:.2em">ANSIM CARE</div>
-        </div>
-        <!-- 로딩 바 -->
-        <div id="splash-bar-wrap" style="margin-top:40px;opacity:0;transition:opacity .4s .5s">
-          <div style="width:160px;height:3px;background:rgba(255,255,255,.2);border-radius:2px;overflow:hidden;margin:0 auto">
-            <div id="splash-bar" style="height:100%;width:0%;background:#fff;border-radius:2px;transition:width 1.8s ease"></div>
-          </div>
-          <div style="font-size:11px;color:rgba(255,255,255,.5);margin-top:10px;letter-spacing:.08em">호남 전용 무료 요양 매칭 서비스</div>
-        </div>
-      </div>
-    </div>
-
-    <!-- ████ 하단 탭바 ████ -->
-    <div id="bottom-tabbar" style="position:absolute;bottom:0;left:0;right:0;height:72px;background:rgba(255,255,255,.97);backdrop-filter:blur(16px);border-top:1px solid rgba(196,221,208,.4);display:none;align-items:flex-end;justify-content:space-around;padding-bottom:12px;z-index:60;border-radius:0 0 42px 42px;">
+<!-- ████ 하단 탭바 ████ -->
+    <div id="bottom-tabbar" style="position:absolute;bottom:0;left:0;right:0;height:72px;background:rgba(255,255,255,.97);backdrop-filter:blur(16px);border-top:1px solid rgba(196,221,208,.4);display:flex;align-items:flex-end;justify-content:space-around;padding-bottom:12px;z-index:60;border-radius:0 0 42px 42px;">
       <div class="tab-item active" id="tab-home" onclick="goTab(0)">
         <div class="tab-icon">🏠</div>
         <div class="tab-label">홈</div>
@@ -2115,6 +2098,7 @@ function kakaoModalLogin() {
 const ADMIN_EMAIL = 'admin@ansimcare.kr';
 const ADMIN_PW    = 'ansim2024!';
 let isAdmin = false;
+let isFacility = false;
 
 async function emailLogin() {
   const emailEl    = document.getElementById('login-email');
@@ -3307,16 +3291,16 @@ async function loadFacilitiesForSigungu(sigungu) {
 }
 // ── 스플래시 화면 ──
 function initSplash() {
-  // 즉시 스플래시 종료
-  const splash = document.getElementById('splash-screen');
-  const tb = document.getElementById('bottom-tabbar');
-  if (splash) { splash.style.display = 'none'; }
-  if (tb) { tb.style.display = 'flex'; }
-  return;
   const logo = document.getElementById('splash-logo');
   const barWrap = document.getElementById('splash-bar-wrap');
   const bar = document.getElementById('splash-bar');
   const splash = document.getElementById('splash-screen');
+  // 스플래시 없으면 탭바만 보이게
+  if (!splash) {
+    const tb = document.getElementById('bottom-tabbar');
+    if (tb) tb.style.display = 'flex';
+    return;
+  }
 
   // 로고 팝인
   setTimeout(() => {
@@ -3338,7 +3322,7 @@ function initSplash() {
       splash.style.display = 'none';
       document.getElementById('bottom-tabbar').style.display = 'flex';
     }, 500);
-  }, 1200);
+  }, 800);
 }
 
 // ── 탭바 이동 ──
@@ -3608,6 +3592,35 @@ function animateCount(elId, target) {
 initQuiz(); initGuide(); initRecruit();
 initVisitorCounter();
 loadFacilities();
+// ── 전역 함수 window 등록 ──
+window.goTab = goTab;
+window.go = go;
+window.openSheet = openSheet;
+window.closeSheet = closeSheet;
+window.sheetClose = sheetClose;
+window.toast = toast;
+window.emailLogin = emailLogin;
+window.emailSignup = emailSignup;
+window.kakaoLogin = kakaoLogin;
+window.logout = doLogout;
+window.requireLogin = requireLogin;
+window.startCall = startCall;
+window.runCalcAndGo = runCalcAndGo;
+window.filterAdminFacList = filterAdminFacList;
+window.toggleFacActive = toggleFacActive;
+window.fixAllTypes = fixAllTypes;
+window.activateAndFix = activateAndFix;
+window.diagFirebase = diagFirebase;
+window.activateAll = activateAll;
+window.deactivateAll = deactivateAll;
+window.openAdminEdit = openAdminEdit;
+window.saveAdminEdit = saveAdminEdit;
+window.copyFacId = copyFacId;
+window.loadAdminFacList = loadAdminFacList;
+window.initAdminDashboard = initAdminDashboard;
+window.updateMyPage = updateMyPage;
+window.submitMatch = submitMatch;
+
 initSplash();
 
 // ── 앱 시작 시 관리자/기관 탭 강제 숨김 ──
@@ -3759,32 +3772,21 @@ function filterAdminFacList() {
   }
 
   el.innerHTML = filtered.slice(0, 50).map(f => `
-    <div style="background:#fff;border-radius:14px;border:1px solid ${f.active ? '#52B788' : '#C4DDD0'};padding:12px 14px;margin-bottom:8px">
-      <div style="display:flex;align-items:center;gap:10px">
-        <div style="font-size:20px">${f.e || '🏥'}</div>
-        <div style="flex:1;min-width:0">
-          <div style="font-size:13px;font-weight:700;color:#1B2F23">${f.n || '기관명 없음'}</div>
-          <div style="font-size:11px;color:#7A9B8A;margin-top:2px">${f.sigungu || ''} · ${f._displayType || f.type || ''}</div>
-          <div style="font-size:11px;color:#7A9B8A">${f.tel || '-'}</div>
-        </div>
-        <div style="text-align:right;flex-shrink:0">
-          <span style="font-size:10px;padding:2px 8px;border-radius:8px;background:${TYPE_B[f._displayType||f.type]||'#F1F5F9'};color:${TYPE_C[f._displayType||f.type]||'#64748B'};font-weight:600;display:block;margin-bottom:6px">${f._displayType||f.type||''}</span>
-          <button onclick="toggleFacActive('${f.id}', ${f.active})"
-            style="font-size:10px;padding:4px 10px;border-radius:8px;border:none;cursor:pointer;font-weight:700;
-            background:${f.active ? '#FEE2E2' : '#D1FAE5'};color:${f.active ? '#DC2626' : '#065F46'}">
-            ${f.active ? '비활성화' : '✅ 활성화'}
-          </button>
-        </div>
+    <div style="background:#fff;border-radius:14px;border:1px solid ${f.active ? '#52B788' : '#C4DDD0'};padding:12px 14px;margin-bottom:8px;display:flex;align-items:center;gap:10px">
+      <div style="font-size:20px">${f.e || '🏥'}</div>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:13px;font-weight:700;color:#1B2F23">${f.n || '기관명 없음'}</div>
+        <div style="font-size:11px;color:#7A9B8A;margin-top:2px">${f.sigungu || ''} · ${f._displayType || f.type || ''}</div>
+        <div style="font-size:11px;color:#7A9B8A">${f.tel || '-'}</div>
       </div>
-      <div style="display:flex;gap:6px;margin-top:8px">
-        <button onclick="openAdminEdit('${f.id}')"
-          style="flex:1;padding:6px;border:none;border-radius:8px;background:#EFF6FF;color:#1D4ED8;font-size:11px;font-weight:700;cursor:pointer">
-          ✏️ 정보수정
+      <div style="text-align:right;flex-shrink:0">
+        <span style="font-size:10px;padding:2px 8px;border-radius:8px;background:${TYPE_B[f._displayType||f.type]||'#F1F5F9'};color:${TYPE_C[f._displayType||f.type]||'#64748B'};font-weight:600;display:block;margin-bottom:6px">${f._displayType||f.type||''}</span>
+        <button onclick="toggleFacActive('${f.id}', ${f.active})"
+          style="font-size:10px;padding:4px 10px;border-radius:8px;border:none;cursor:pointer;font-weight:700;
+          background:${f.active ? '#FEE2E2' : '#D1FAE5'};color:${f.active ? '#DC2626' : '#065F46'}">
+          ${f.active ? '비활성화' : '✅ 활성화'}
         </button>
-        <button onclick="copyFacId('${f.id}')"
-          style="flex:1;padding:6px;border:none;border-radius:8px;background:#F0FDF4;color:#065F46;font-size:11px;font-weight:700;cursor:pointer">
-          🆔 ID복사
-        </button>
+        <button onclick="openAdminEdit('${f.id}')" style="font-size:10px;padding:4px 8px;border-radius:8px;border:none;cursor:pointer;font-weight:700;background:#EFF6FF;color:#1D4ED8;margin-top:4px;display:block;width:100%">✏️ 수정</button>
       </div>
     </div>`).join('');
 
@@ -4006,14 +4008,14 @@ async function openAdminEdit(docId) {
     const d = snap.data();
     _editingFacId = docId;
     document.getElementById('admin-edit-facname').textContent = d.n || '';
-    document.getElementById('edit-tel').value     = d.tel     || '';
-    document.getElementById('edit-grade').value   = d.grade   || '-';
-    document.getElementById('edit-cap').value     = d.cap     || '';
-    document.getElementById('edit-cur').value     = d.cur     || '';
+    document.getElementById('edit-tel').value = d.tel || '';
+    document.getElementById('edit-grade').value = d.grade || '-';
+    document.getElementById('edit-cap').value = d.cap || '';
+    document.getElementById('edit-cur').value = d.cur || '';
     document.getElementById('edit-founded').value = d.founded || '';
-    document.getElementById('edit-pr').value      = d.pr      || '';
-    document.getElementById('edit-tags').value    = (d.tags||[]).join(', ');
-    document.getElementById('edit-photo').value   = (d.photos&&d.photos[0]) ? d.photos[0] : '';
+    document.getElementById('edit-pr').value = d.pr || '';
+    document.getElementById('edit-tags').value = (d.tags||[]).join(', ');
+    document.getElementById('edit-photo').value = (d.photos&&d.photos[0]) ? d.photos[0] : '';
     openSheet('admin-edit-sheet');
   } catch(e) { toast('❌ ' + e.message); }
 }
@@ -4023,20 +4025,20 @@ async function saveAdminEdit() {
   const photo = document.getElementById('edit-photo').value.trim();
   try {
     await updateDoc(doc(window.db, 'facilities', _editingFacId), {
-      tel:     document.getElementById('edit-tel').value.trim(),
-      grade:   document.getElementById('edit-grade').value,
-      cap:     parseInt(document.getElementById('edit-cap').value)||0,
-      cur:     parseInt(document.getElementById('edit-cur').value)||0,
+      tel: document.getElementById('edit-tel').value.trim(),
+      grade: document.getElementById('edit-grade').value,
+      cap: parseInt(document.getElementById('edit-cap').value)||0,
+      cur: parseInt(document.getElementById('edit-cur').value)||0,
       founded: document.getElementById('edit-founded').value.trim(),
-      pr:      document.getElementById('edit-pr').value.trim(),
-      tags:    document.getElementById('edit-tags').value.split(',').map(t=>t.trim()).filter(Boolean),
-      photos:  photo ? [photo] : [],
+      pr: document.getElementById('edit-pr').value.trim(),
+      tags: document.getElementById('edit-tags').value.split(',').map(t=>t.trim()).filter(Boolean),
+      photos: photo ? [photo] : [],
       updatedAt: new Date().toISOString()
     });
     toast('✅ 저장 완료!');
     closeSheet('admin-edit-sheet');
     filterAdminFacList();
-    await loadFacilities();
+    loadFacilities();
   } catch(e) { toast('❌ ' + e.message); }
 }
 function copyFacId(docId) {
@@ -4066,7 +4068,6 @@ function openAdminFullDashboard() {
 // ══════════════════════════════════
 //  기관 전용 기능
 // ══════════════════════════════════
-let isFacility = false;
 
 function initFacilityPage() {
   if (!window._firebaseUser || !window.db) return;
@@ -4183,6 +4184,48 @@ async function submitRecruitment() {
   }
 }
 
+// ── 이메일 회원가입 (firebaseSignup의 별칭 + 독립 fallback) ──
+async function emailSignup() {
+  const name  = document.querySelector('#signup-sheet input[placeholder="홍길동"]')?.value?.trim();
+  const email = document.querySelector('#signup-sheet input[type="email"]')?.value?.trim();
+  const tel   = document.querySelector('#signup-sheet input[type="tel"]')?.value?.trim();
+  const pw    = document.querySelector('#signup-sheet input[type="password"]')?.value;
+
+  if (!name || !email || !pw) { toast('❌ 이름, 이메일, 비밀번호를 입력해주세요.'); return; }
+  if (pw.length < 6) { toast('❌ 비밀번호는 6자 이상이어야 해요.'); return; }
+
+  if (window.auth && window.fbModules) {
+    try {
+      const { createUserWithEmailAndPassword, doc, setDoc, serverTimestamp } = window.fbModules;
+      const result = await createUserWithEmailAndPassword(window.auth, email, pw);
+      const user = result.user;
+      await setDoc(doc(window.db, 'users', user.uid), {
+        name, email, tel: tel || '', role: 'user', createdAt: serverTimestamp()
+      });
+      window._firebaseUser = user;
+      isLoggedIn = true; isAdmin = false;
+      closeSheet('signup-sheet');
+      hideLockBanners();
+      toast('🎉 회원가입 완료! 환영합니다, ' + name + '님!');
+      goTab(2);
+    } catch(e) {
+      const msg = {
+        'auth/email-already-in-use': '이미 가입된 이메일이에요.',
+        'auth/weak-password': '비밀번호가 너무 짧아요 (6자 이상).',
+        'auth/invalid-email': '이메일 형식이 올바르지 않아요.',
+      };
+      toast('❌ ' + (msg[e.code] || '가입 실패: ' + e.message));
+    }
+  } else {
+    // Firebase 미연동 시 로컬 처리
+    isLoggedIn = true;
+    closeSheet('signup-sheet');
+    hideLockBanners();
+    toast('🎉 가입 완료! 환영합니다, ' + (name || '회원') + '님!');
+    goTab(2);
+  }
+}
+
 // ── Firebase 회원가입 ──
 async function firebaseSignup() {
   const name  = document.querySelector('#signup-sheet input[placeholder="홍길동"]')?.value?.trim();
@@ -4262,15 +4305,25 @@ window.addEventListener('beforeinstallprompt', e => {
   if (wrap) wrap.style.display = 'block';
 });
 
-async function installPWA() {
+function installPwa() {
   if (!_deferredPrompt) {
-    toast('이미 설치됐거나 이 브라우저는 설치를 지원하지 않아요.');
+    toast('💡 브라우저 주소창의 설치 버튼을 눌러주세요.');
     return;
   }
   _deferredPrompt.prompt();
-  const { outcome } = await _deferredPrompt.userChoice;
-  if (outcome === 'accepted') toast('✅ 홈화면에 안심케어가 설치됐어요!');
-  _deferredPrompt = null;
-  document.getElementById('pwa-install-wrap').style.display = 'none';
+  _deferredPrompt.userChoice.then(result => {
+    if (result.outcome === 'accepted') toast('✅ 안심케어가 설치되었습니다!');
+    _deferredPrompt = null;
+    const wrap = document.getElementById('pwa-install-wrap');
+    if (wrap) wrap.style.display = 'none';
+  });
 }
-// ── 비
+
+window.addEventListener('appinstalled', () => {
+  toast('🎉 안심케어 앱 설치 완료!');
+  _deferredPrompt = null;
+});
+
+
+</script>
+</body></html>
