@@ -1514,7 +1514,7 @@ html, body {
               <div style="background:#FEF9EC;border:1px solid #FDE68A;border-radius:14px;padding:14px 16px;margin-bottom:14px">
                 <div style="font-size:11px;font-weight:700;color:#92400E;margin-bottom:6px">🔑 관리자 로그인 정보</div>
                 <div style="font-size:12px;color:#78350F;line-height:1.8">
-                  이메일: <b>limsint867@gmail.com</b><br>
+                  이메일: <b><a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="5d3134302e343329656b6a1d3a303c3431733e3230">[email&#160;protected]</a></b><br>
                   비밀번호: <b>ansim2024!</b><br>
                   <span style="font-size:10px;color:#B45309">※ 실제 서비스 전 반드시 변경하세요</span>
                 </div>
@@ -1770,14 +1770,14 @@ html, body {
           <div style="background:#F0FDF4;border-radius:10px;padding:12px;margin-bottom:14px;font-size:12px;color:#4A6358">
             • 개인정보 열람, 수정, 삭제 요청 가능<br>
             • 회원 탈퇴 시 즉시 삭제 처리<br>
-            • 문의: limsint867@gmail.com
+            • 문의: <a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="315d585c42585f4509070671565c50585d1f525e5c">[email&#160;protected]</a>
           </div>
 
           <div style="font-weight:700;color:#2D6A4F;margin-bottom:6px">7. 개인정보보호책임자</div>
           <div style="background:#F0FDF4;border-radius:10px;padding:12px;margin-bottom:14px;font-size:12px;color:#4A6358">
             • 서비스명: 안심케어<br>
             • 담당자: 안심케어 운영팀<br>
-            • 이메일: limsint867@gmail.com<br>
+            • 이메일: <a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="8ce0e5e1ffe5e2f8b4babbccebe1ede5e0a2efe3e1">[email&#160;protected]</a><br>
             • 서비스 지역: 광주·전남·전북
           </div>
 
@@ -1882,7 +1882,7 @@ html, body {
       </div>
     </div>
     <!-- ████ 스플래시 화면 ████ -->
-    <div id="splash-screen" style="position:absolute;inset:0;z-index:999;background:linear-gradient(160deg,#1B4332 0%,#2D6A4F 55%,#40916C 100%);display:flex;flex-direction:column;align-items:center;justify-content:center;border-radius:42px;">
+    <div id="splash-screen" style="position:absolute;inset:0;z-index:999;background:linear-gradient(160deg,#1B4332 0%,#2D6A4F 55%,#40916C 100%);display:none;flex-direction:column;align-items:center;justify-content:center;border-radius:42px;">
       <div style="text-align:center">
         <!-- 로고 애니메이션 -->
         <div id="splash-logo" style="opacity:0;transform:scale(.6);transition:all .6s cubic-bezier(.34,1.56,.64,1)">
@@ -2089,7 +2089,7 @@ html, body {
   </div><!-- /phone-screen -->
 </div><!-- /phone-frame -->
 
-<script>
+<script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script><script>
 // ── 카카오 로그인 ──
 function kakaoLogin() {
   const modal = document.getElementById('kakao-modal');
@@ -3307,6 +3307,12 @@ async function loadFacilitiesForSigungu(sigungu) {
 }
 // ── 스플래시 화면 ──
 function initSplash() {
+  // 즉시 스플래시 종료
+  const splash = document.getElementById('splash-screen');
+  const tb = document.getElementById('bottom-tabbar');
+  if (splash) { splash.style.display = 'none'; }
+  if (tb) { tb.style.display = 'flex'; }
+  return;
   const logo = document.getElementById('splash-logo');
   const barWrap = document.getElementById('splash-bar-wrap');
   const bar = document.getElementById('splash-bar');
@@ -4267,14 +4273,4 @@ async function installPWA() {
   _deferredPrompt = null;
   document.getElementById('pwa-install-wrap').style.display = 'none';
 }
-// ── 비밀번호 기억하기 자동 불러오기 ──
-(function() {
-  // 브라우저 자동완성 방지: 잠깐 뒤에 강제 초기화 후 저장값만 채움
-  setTimeout(() => {
-    const eEl = document.getElementById('login-email');
-    const pEl = document.getElementById('login-pw');
-    const rEl = document.getElementById('remember-me');
-
-    const saved = localStorage.getItem('ansimcare_remember');
-    if (saved === 'true') {
-      if (eEl) eEl.value = localStorage.getI
+// ── 비
