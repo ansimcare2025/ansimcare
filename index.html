@@ -1,5 +1,4 @@
 <!DOCTYPE html>
-<!-- saved from url=(0065)file:///C:/Users/%EC%9E%84%EC%9E%AC%EA%B5%AD/Downloads/index.html -->
 <html lang="ko"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
@@ -13,7 +12,7 @@
 <meta property="og:title" content="안심케어 — 호남 요양시설 매칭">
 <meta property="og:description" content="광주·전남·전북 어르신을 위한 요양시설 무료 매칭 서비스">
 <meta property="og:type" content="website">
-<link href="./안심케어 앱 프로토타입_files/css2" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700&family=Noto+Serif+KR:wght@700&display=swap" rel="stylesheet">
 <style>
 /* ════════════════════════════════════════
    🍊 안심케어 — 따뜻한 베이지/오렌지 테마
@@ -1515,7 +1514,7 @@ html, body {
               <div style="background:#FEF9EC;border:1px solid #FDE68A;border-radius:14px;padding:14px 16px;margin-bottom:14px">
                 <div style="font-size:11px;font-weight:700;color:#92400E;margin-bottom:6px">🔑 관리자 로그인 정보</div>
                 <div style="font-size:12px;color:#78350F;line-height:1.8">
-                  이메일: <b><a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="2746434a4e49674649544e4a44465542094c55">[email&#160;protected]</a></b><br>
+                  이메일: <b>limsint867@gmail.com</b><br>
                   비밀번호: <b>ansim2024!</b><br>
                   <span style="font-size:10px;color:#B45309">※ 실제 서비스 전 반드시 변경하세요</span>
                 </div>
@@ -1829,6 +1828,59 @@ html, body {
       </div>
     </div>
 
+    <!-- ████ 관리자 기관 수정 시트 ████ -->
+    <div class="sheet-backdrop" id="admin-edit-sheet" onclick="sheetClose(event,'admin-edit-sheet')">
+      <div class="bottom-sheet" style="max-height:90vh;overflow-y:auto">
+        <div class="sheet-handle"></div>
+        <button class="sheet-close" onclick="closeSheet('admin-edit-sheet')">✕</button>
+        <div style="font-family:'Noto Serif KR',serif;font-size:17px;font-weight:700;color:#1B2F23;margin-bottom:4px">✏️ 기관 정보 수정</div>
+        <div id="admin-edit-facname" style="font-size:12px;color:#7A9B8A;margin-bottom:16px"></div>
+        <div class="form-group">
+          <label class="form-label">전화번호</label>
+          <input class="form-input" id="edit-tel" type="tel" placeholder="예) 062-000-0000">
+        </div>
+        <div class="form-group">
+          <label class="form-label">평가등급</label>
+          <select class="form-input form-select" id="edit-grade">
+            <option value="-">미평가</option>
+            <option value="A등급">A등급</option>
+            <option value="B등급">B등급</option>
+            <option value="C등급">C등급</option>
+            <option value="D등급">D등급</option>
+            <option value="E등급">E등급</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">정원</label>
+          <input class="form-input" id="edit-cap" type="number" placeholder="예) 30">
+        </div>
+        <div class="form-group">
+          <label class="form-label">현재 입소인원</label>
+          <input class="form-input" id="edit-cur" type="number" placeholder="예) 25">
+        </div>
+        <div class="form-group">
+          <label class="form-label">설립연도</label>
+          <input class="form-input" id="edit-founded" placeholder="예) 2015년">
+        </div>
+        <div class="form-group">
+          <label class="form-label">시설 소개 (PR글)</label>
+          <textarea class="form-input" id="edit-pr" rows="4" placeholder="시설 특징, 전문 서비스, 위치 등" style="resize:none;height:100px"></textarea>
+        </div>
+        <div class="form-group">
+          <label class="form-label">태그 (쉼표로 구분)</label>
+          <input class="form-input" id="edit-tags" placeholder="예) 치매전문, 재활치료">
+        </div>
+        <div class="form-group">
+          <label class="form-label">사진 URL</label>
+          <input class="form-input" id="edit-photo" placeholder="구글 드라이브 공유링크 등">
+          <div style="font-size:11px;color:#AEC5B7;margin-top:4px">💡 구글 드라이브에 사진 올리고 공유링크 붙여넣기</div>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:8px">
+          <button class="btn btn-ghost" onclick="closeSheet('admin-edit-sheet')" style="flex:1">취소</button>
+          <button class="btn btn-primary" onclick="saveAdminEdit()" style="flex:2">💾 저장</button>
+        </div>
+      </div>
+    </div>
     <!-- ████ 스플래시 화면 ████ -->
     <div id="splash-screen" style="position:absolute;inset:0;z-index:999;background:linear-gradient(160deg,#1B4332 0%,#2D6A4F 55%,#40916C 100%);display:flex;flex-direction:column;align-items:center;justify-content:center;border-radius:42px;">
       <div style="text-align:center">
@@ -2037,7 +2089,7 @@ html, body {
   </div><!-- /phone-screen -->
 </div><!-- /phone-frame -->
 
-<script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script><script>
+<script>
 // ── 카카오 로그인 ──
 function kakaoLogin() {
   const modal = document.getElementById('kakao-modal');
@@ -3280,7 +3332,7 @@ function initSplash() {
       splash.style.display = 'none';
       document.getElementById('bottom-tabbar').style.display = 'flex';
     }, 500);
-  }, 2600);
+  }, 1200);
 }
 
 // ── 탭바 이동 ──
@@ -3701,19 +3753,31 @@ function filterAdminFacList() {
   }
 
   el.innerHTML = filtered.slice(0, 50).map(f => `
-    <div style="background:#fff;border-radius:14px;border:1px solid ${f.active ? '#52B788' : '#C4DDD0'};padding:12px 14px;margin-bottom:8px;display:flex;align-items:center;gap:10px">
-      <div style="font-size:20px">${f.e || '🏥'}</div>
-      <div style="flex:1;min-width:0">
-        <div style="font-size:13px;font-weight:700;color:#1B2F23">${f.n || '기관명 없음'}</div>
-        <div style="font-size:11px;color:#7A9B8A;margin-top:2px">${f.sigungu || ''} · ${f._displayType || f.type || ''}</div>
-        <div style="font-size:11px;color:#7A9B8A">${f.tel || '-'}</div>
+    <div style="background:#fff;border-radius:14px;border:1px solid ${f.active ? '#52B788' : '#C4DDD0'};padding:12px 14px;margin-bottom:8px">
+      <div style="display:flex;align-items:center;gap:10px">
+        <div style="font-size:20px">${f.e || '🏥'}</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:13px;font-weight:700;color:#1B2F23">${f.n || '기관명 없음'}</div>
+          <div style="font-size:11px;color:#7A9B8A;margin-top:2px">${f.sigungu || ''} · ${f._displayType || f.type || ''}</div>
+          <div style="font-size:11px;color:#7A9B8A">${f.tel || '-'}</div>
+        </div>
+        <div style="text-align:right;flex-shrink:0">
+          <span style="font-size:10px;padding:2px 8px;border-radius:8px;background:${TYPE_B[f._displayType||f.type]||'#F1F5F9'};color:${TYPE_C[f._displayType||f.type]||'#64748B'};font-weight:600;display:block;margin-bottom:6px">${f._displayType||f.type||''}</span>
+          <button onclick="toggleFacActive('${f.id}', ${f.active})"
+            style="font-size:10px;padding:4px 10px;border-radius:8px;border:none;cursor:pointer;font-weight:700;
+            background:${f.active ? '#FEE2E2' : '#D1FAE5'};color:${f.active ? '#DC2626' : '#065F46'}">
+            ${f.active ? '비활성화' : '✅ 활성화'}
+          </button>
+        </div>
       </div>
-      <div style="text-align:right;flex-shrink:0">
-        <span style="font-size:10px;padding:2px 8px;border-radius:8px;background:${TYPE_B[f._displayType||f.type]||'#F1F5F9'};color:${TYPE_C[f._displayType||f.type]||'#64748B'};font-weight:600;display:block;margin-bottom:6px">${f._displayType||f.type||''}</span>
-        <button onclick="toggleFacActive('${f.id}', ${f.active})"
-          style="font-size:10px;padding:4px 10px;border-radius:8px;border:none;cursor:pointer;font-weight:700;
-          background:${f.active ? '#FEE2E2' : '#D1FAE5'};color:${f.active ? '#DC2626' : '#065F46'}">
-          ${f.active ? '비활성화' : '✅ 활성화'}
+      <div style="display:flex;gap:6px;margin-top:8px">
+        <button onclick="openAdminEdit('${f.id}')"
+          style="flex:1;padding:6px;border:none;border-radius:8px;background:#EFF6FF;color:#1D4ED8;font-size:11px;font-weight:700;cursor:pointer">
+          ✏️ 정보수정
+        </button>
+        <button onclick="copyFacId('${f.id}')"
+          style="flex:1;padding:6px;border:none;border-radius:8px;background:#F0FDF4;color:#065F46;font-size:11px;font-weight:700;cursor:pointer">
+          🆔 ID복사
         </button>
       </div>
     </div>`).join('');
@@ -3812,7 +3876,11 @@ async function activateAndFix() {
       const chunk = docs.slice(i, i + batchSize);
       chunk.forEach(d => {
         const data = d.data();
-        const correctType = guessType(data.n || data.name || '');
+        // clcd 코드로 정확히 분류 (공단 API 저장 시 clcd 필드)
+        const correctType = guessType(
+          data.n || data.name || '',
+          data.clcd || data.clCd || data.rnfclCd || ''
+        );
         batch.update(doc(window.db, 'facilities', d.id), {
           type: correctType,
           active: true
@@ -3919,6 +3987,54 @@ async function activateAllFacilities(activate) {
     toast('❌ 오류: ' + e.message);
     console.error('activateAllFacilities 오류:', e);
   }
+}
+
+let _editingFacId = null;
+async function openAdminEdit(docId) {
+  if (!window.db || !window.fbModules) { toast('❌ Firebase 미연결'); return; }
+  const { doc, getDoc } = window.fbModules;
+  toast('🔄 불러오는 중...');
+  try {
+    const snap = await getDoc(doc(window.db, 'facilities', docId));
+    if (!snap.exists()) { toast('❌ 기관을 찾을 수 없습니다'); return; }
+    const d = snap.data();
+    _editingFacId = docId;
+    document.getElementById('admin-edit-facname').textContent = d.n || '';
+    document.getElementById('edit-tel').value     = d.tel     || '';
+    document.getElementById('edit-grade').value   = d.grade   || '-';
+    document.getElementById('edit-cap').value     = d.cap     || '';
+    document.getElementById('edit-cur').value     = d.cur     || '';
+    document.getElementById('edit-founded').value = d.founded || '';
+    document.getElementById('edit-pr').value      = d.pr      || '';
+    document.getElementById('edit-tags').value    = (d.tags||[]).join(', ');
+    document.getElementById('edit-photo').value   = (d.photos&&d.photos[0]) ? d.photos[0] : '';
+    openSheet('admin-edit-sheet');
+  } catch(e) { toast('❌ ' + e.message); }
+}
+async function saveAdminEdit() {
+  if (!_editingFacId || !window.db || !window.fbModules) return;
+  const { doc, updateDoc } = window.fbModules;
+  const photo = document.getElementById('edit-photo').value.trim();
+  try {
+    await updateDoc(doc(window.db, 'facilities', _editingFacId), {
+      tel:     document.getElementById('edit-tel').value.trim(),
+      grade:   document.getElementById('edit-grade').value,
+      cap:     parseInt(document.getElementById('edit-cap').value)||0,
+      cur:     parseInt(document.getElementById('edit-cur').value)||0,
+      founded: document.getElementById('edit-founded').value.trim(),
+      pr:      document.getElementById('edit-pr').value.trim(),
+      tags:    document.getElementById('edit-tags').value.split(',').map(t=>t.trim()).filter(Boolean),
+      photos:  photo ? [photo] : [],
+      updatedAt: new Date().toISOString()
+    });
+    toast('✅ 저장 완료!');
+    closeSheet('admin-edit-sheet');
+    filterAdminFacList();
+    await loadFacilities();
+  } catch(e) { toast('❌ ' + e.message); }
+}
+function copyFacId(docId) {
+  navigator.clipboard.writeText(docId).then(()=>toast('✅ ID 복사: '+docId)).catch(()=>toast('ID: '+docId));
 }
 async function toggleFacActive(docId, currentActive) {
   if (!window.db || !window.fbModules) return;
@@ -4161,16 +4277,4 @@ async function installPWA() {
 
     const saved = localStorage.getItem('ansimcare_remember');
     if (saved === 'true') {
-      if (eEl) eEl.value = localStorage.getItem('ansimcare_email') || '';
-      if (pEl) pEl.value = localStorage.getItem('ansimcare_pw')    || '';
-      if (rEl) rEl.checked = true;
-    } else {
-      // 기억하기 미체크 시 무조건 비우기
-      if (eEl) eEl.value = '';
-      if (pEl) pEl.value = '';
-      if (rEl) rEl.checked = false;
-    }
-  }, 100);
-})();
-</script>
-</body></html>
+      if (eEl) eEl.value = localStorage.getI
