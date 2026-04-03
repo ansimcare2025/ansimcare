@@ -445,6 +445,31 @@ html, body {
     if (tabId) { var tb = document.getElementById(tabId); if(tb) tb.classList.add('active'); }
   }
   function go(n) { goTab(n); }
+    async function emailLogin() {
+    var emailEl = document.getElementById('login-email');
+    var pwEl = document.getElementById('login-pw');
+    var email = emailEl ? emailEl.value.trim() : '';
+    var pw = pwEl ? pwEl.value : '';
+    if (!email || !pw) { toast('❌ 이메일과 비밀번호를 입력해주세요.'); return; }
+    if (window.auth && window.fbModules) {
+      try {
+        var result = await window.fbModules.signInWithEmailAndPassword(window.auth, email, pw);
+        var user = result.user;
+        window._firebaseUser = user;
+        try {
+          var userDoc = await window.fbModules.getDoc(window.fbModules.doc(window.db, 'users', user.uid));
+          var role = userDoc.exists() ? (userDoc.data().role || 'user') : 'user';
+          window._userRole = role;
+          if (role === 'admin') { var at=document.getElementById('tab-admin'); if(at) at.classList.add('show-tab'); toast('🔐 관리자 로그인!'); goTab(0); }
+          else if (role === 'facility') { var ft=document.getElementById('tab-facility'); if(ft) ft.classList.add('show-tab'); toast('🏥 로그인 성공!'); goTab(8); }
+          else { toast('✅ 로그인 성공!'); goTab(2); }
+        } catch(e2) { toast('✅ 로그인 성공!'); goTab(2); }
+      } catch(e) {
+        var msg = {'auth/wrong-password':'비밀번호가 틀렸어요.','auth/user-not-found':'등록되지 않은 이메일이에요.','auth/invalid-credential':'이메일 또는 비밀번호가 올바르지 않아요.'};
+        toast('❌ ' + (msg[e.code] || e.message));
+      }
+    } else { toast('❌ Firebase 연결 중입니다. 잠시 후 다시 시도해주세요.'); }
+  }
   function openSheet(id) { var el=document.getElementById(id); if(el) el.style.display='flex'; }
   function closeSheet(id) { var el=document.getElementById(id); if(el) el.style.display='none'; }
   function toast(msg) {
