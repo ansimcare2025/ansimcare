@@ -2347,15 +2347,16 @@ async function loadFacilities() {
             // clcd 코드로 우선 분류 (가장 정확), 없으면 type 문자열로 보완
             const clcd1 = (d.clcd || '').toUpperCase();
             let facType = '';
-            if (clcd1.startsWith('A')) facType = '요양병원';
+            if (clcd1 === 'A01' || clcd1 === 'A02') facType = '요양원';
+            else if (clcd1.startsWith('A')) facType = '요양병원';
             else if (clcd1 === 'B03' || clcd1 === 'B04') facType = '주야간보호';
-            else if (clcd1 === 'B01' || clcd1 === 'B02' || clcd1.startsWith('B')) facType = '재가방문요양';
+            else if (clcd1 === 'B01' || clcd1 === 'B02' || clcd1 === 'B05' || clcd1.startsWith('B')) facType = '재가방문요양';
             else {
               // clcd 없으면 기관명/type 텍스트로 분류
               const raw = d.type || d.n || '';
               if (raw.includes('요양병원')) facType = '요양병원';
               else if (raw.includes('주야간') || raw.includes('주·야간') || raw.includes('주간보호') || raw.includes('야간보호')) facType = '주야간보호';
-              else if (raw.includes('재가') || raw.includes('방문요양') || raw.includes('방문목욕')) facType = '재가방문요양';
+              else if (raw.includes('재가') || raw.includes('방문요양') || raw.includes('방문목욕') || raw.includes('재가복지') || raw.includes('재가노인복지') || raw.includes('노인복지센터')) facType = '재가방문요양';
               else if (raw.includes('요양원') || raw.includes('노인요양시설') || raw.includes('노인가정요양')) facType = '요양원';
               else facType = '요양원';
             }
@@ -3233,14 +3234,15 @@ async function loadFacilitiesForSigungu(sigungu) {
         if (d.active === true && dbSigungu === selSigungu) {
           const clcd2 = (d.clcd || '').toUpperCase();
           let fType = '';
-          if (clcd2.startsWith('A')) fType = '요양병원';
+          if (clcd2 === 'A01' || clcd2 === 'A02') fType = '요양원';
+          else if (clcd2.startsWith('A')) fType = '요양병원';
           else if (clcd2 === 'B03' || clcd2 === 'B04') fType = '주야간보호';
-          else if (clcd2 === 'B01' || clcd2 === 'B02' || clcd2.startsWith('B')) fType = '재가방문요양';
+          else if (clcd2 === 'B01' || clcd2 === 'B02' || clcd2 === 'B05' || clcd2.startsWith('B')) fType = '재가방문요양';
           else {
             const raw2 = d.type || d.n || '';
             if (raw2.includes('요양병원')) fType = '요양병원';
             else if (raw2.includes('주야간') || raw2.includes('주·야간') || raw2.includes('주간보호') || raw2.includes('야간보호')) fType = '주야간보호';
-            else if (raw2.includes('재가') || raw2.includes('방문요양') || raw2.includes('방문목욕')) fType = '재가방문요양';
+            else if (raw2.includes('재가') || raw2.includes('방문요양') || raw2.includes('방문목욕') || raw2.includes('재가복지') || raw2.includes('재가노인복지') || raw2.includes('노인복지센터')) fType = '재가방문요양';
             else if (raw2.includes('요양원') || raw2.includes('노인요양시설') || raw2.includes('노인가정요양')) fType = '요양원';
             else fType = '요양원';
           }
@@ -3734,14 +3736,15 @@ async function loadAdminFacList() {
         const raw = doc.data();
     const clcd3 = (raw.clcd || '').toUpperCase();
     let nType = '';
-    if (clcd3.startsWith('A')) nType = '요양병원';
+    if (clcd3 === 'A01' || clcd3 === 'A02') nType = '요양원';
+    else if (clcd3.startsWith('A')) nType = '요양병원';
     else if (clcd3 === 'B03' || clcd3 === 'B04') nType = '주야간보호';
-    else if (clcd3 === 'B01' || clcd3 === 'B02' || clcd3.startsWith('B')) nType = '재가방문요양';
+    else if (clcd3 === 'B01' || clcd3 === 'B02' || clcd3 === 'B05' || clcd3.startsWith('B')) nType = '재가방문요양';
     else {
       const raw3 = raw.type || raw.n || '';
       if (raw3.includes('요양병원')) nType = '요양병원';
       else if (raw3.includes('주야간') || raw3.includes('주·야간') || raw3.includes('주간보호') || raw3.includes('야간보호')) nType = '주야간보호';
-      else if (raw3.includes('재가') || raw3.includes('방문요양') || raw3.includes('방문목욕')) nType = '재가방문요양';
+      else if (raw3.includes('재가') || raw3.includes('방문요양') || raw3.includes('방문목욕') || raw3.includes('재가복지') || raw3.includes('재가노인복지') || raw3.includes('노인복지센터')) nType = '재가방문요양';
       else if (raw3.includes('요양원') || raw3.includes('노인요양시설') || raw3.includes('노인가정요양')) nType = '요양원';
       else nType = '요양원';
     }
@@ -3766,7 +3769,7 @@ function filterAdminFacList() {
     t = t || '';
     if (t.includes('요양병원')) return '요양병원';
     if (t.includes('주야간') || t.includes('주·야간') || t.includes('주간보호') || t.includes('야간보호')) return '주야간보호';
-    if (t.includes('재가') || t.includes('방문요양') || t.includes('방문목욕')) return '재가방문요양';
+    if (t.includes('재가') || t.includes('방문요양') || t.includes('방문목욕') || t.includes('재가복지') || t.includes('재가노인복지') || t.includes('노인복지센터')) return '재가방문요양';
     if (t.includes('요양원') || t.includes('노인요양시설') || t.includes('노인가정요양')) return '요양원';
     return t;
   }
