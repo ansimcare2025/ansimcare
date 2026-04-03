@@ -395,142 +395,16 @@ html, body {
 }
 .toast-wrap.show { opacity:1; transform:translateX(-50%) translateY(0); }
 
-/* ══ 모바일 실기기: phone-frame 제거 ══ */
-@media (max-width: 480px) {
-  html, body {
-    background: var(--c-bg);
-    background-image: none;
-    padding: 0;
-    align-items: stretch;
-    justify-content: stretch;
-  }
-  .phone-frame {
-    width: 100%;
-    height: 100vh;
-    height: 100dvh;
-    border-radius: 0;
-    padding: 0;
-    box-shadow: none;
-    background: transparent;
-  }
-  .phone-screen {
-    border-radius: 0;
-  }
-  .dynamic-island {
-    display: none;
-  }
-  .status-bar {
-    height: env(safe-area-inset-top, 20px);
-    padding: 0;
-  }
-}
-
 /* ══ SIGNUP SHEET ══ */
 </style>
 <!-- ★ 카카오 SDK (CDN 자동 로드) -->
 <script>
-  // 전역 함수 — 버튼 클릭 시 즉시 동작 (스크립트 로드 순서 무관)
-  function goTab(n) {
-    var pages = document.querySelectorAll('.page');
-    pages.forEach(function(p) { p.classList.remove('active'); p.style.animation = ''; });
-    var next = document.getElementById('p' + n);
-    if (!next) return;
-    next.style.animation = 'slideIn .28s cubic-bezier(.4,0,.2,1)';
-    next.classList.add('active');
-    var sa = document.getElementById('scroll-area');
-    if (sa) sa.scrollTop = 0;
-    var TAB_MAP = { 0:'tab-home', 2:'tab-info', 3:'tab-psych', 4:'tab-match', 5:'tab-guide', 6:'tab-my', 7:'tab-admin', 8:'tab-facility' };
-    document.querySelectorAll('.tab-item').forEach(function(t) { t.classList.remove('active'); });
-    var tabId = TAB_MAP[n];
-    if (tabId) { var tb = document.getElementById(tabId); if(tb) tb.classList.add('active'); }
-  }
-  function go(n) { goTab(n); }
-    async function emailLogin() {
-    var emailEl = document.getElementById('login-email');
-    var pwEl = document.getElementById('login-pw');
-    var email = emailEl ? emailEl.value.trim() : '';
-    var pw = pwEl ? pwEl.value : '';
-    if (!email || !pw) { toast('❌ 이메일과 비밀번호를 입력해주세요.'); return; }
-    if (window.auth && window.fbModules) {
-      try {
-        var result = await window.fbModules.signInWithEmailAndPassword(window.auth, email, pw);
-        var user = result.user;
-        window._firebaseUser = user;
-        try {
-          var userDoc = await window.fbModules.getDoc(window.fbModules.doc(window.db, 'users', user.uid));
-          var role = userDoc.exists() ? (userDoc.data().role || 'user') : 'user';
-          window._userRole = role;
-          if (role === 'admin') { var at=document.getElementById('tab-admin'); if(at) at.classList.add('show-tab'); toast('🔐 관리자 로그인!'); goTab(0); }
-          else if (role === 'facility') { var ft=document.getElementById('tab-facility'); if(ft) ft.classList.add('show-tab'); toast('🏥 로그인 성공!'); goTab(8); }
-          else { toast('✅ 로그인 성공!'); goTab(2); }
-        } catch(e2) { toast('✅ 로그인 성공!'); goTab(2); }
-      } catch(e) {
-        var msg = {'auth/wrong-password':'비밀번호가 틀렸어요.','auth/user-not-found':'등록되지 않은 이메일이에요.','auth/invalid-credential':'이메일 또는 비밀번호가 올바르지 않아요.'};
-        toast('❌ ' + (msg[e.code] || e.message));
-      }
-    } else { toast('❌ Firebase 연결 중입니다. 잠시 후 다시 시도해주세요.'); }
-  }
-  function openSheet(id) { var el=document.getElementById(id); if(el) el.style.display='flex'; }
-  function closeSheet(id) { var el=document.getElementById(id); if(el) el.style.display='none'; }
-  function toast(msg) {
-    var t = document.getElementById('toast-msg');
-    if (t) {
-      t.textContent = msg;
-      t.classList.add('show');
-      setTimeout(function(){ t.classList.remove('show'); }, 2800);
-    } else { console.log(msg); }
-  }
-
-  async function emailLogin() {
-    var emailEl = document.getElementById('login-email');
-    var pwEl    = document.getElementById('login-pw');
-    var email   = emailEl ? emailEl.value.trim() : '';
-    var pw      = pwEl    ? pwEl.value : '';
-    if (!email || !pw) { toast('❌ 이메일과 비밀번호를 입력해주세요.'); return; }
-    if (window.auth && window.fbModules) {
-      try {
-        var signIn = window.fbModules.signInWithEmailAndPassword;
-        var result = await signIn(window.auth, email, pw);
-        var user = result.user;
-        window._firebaseUser = user;
-        // 역할 확인
-        try {
-          var getDoc = window.fbModules.getDoc;
-          var doc    = window.fbModules.doc;
-          var userDoc = await getDoc(doc(window.db, 'users', user.uid));
-          var role = userDoc.exists() ? (userDoc.data().role || 'user') : 'user';
-          window._userRole = role;
-          if (role === 'admin') {
-            var at = document.getElementById('tab-admin');
-            if (at) at.classList.add('show-tab');
-            toast('🔐 관리자로 로그인했습니다.');
-            goTab(0);
-          } else if (role === 'facility') {
-            var ft = document.getElementById('tab-facility');
-            if (ft) ft.classList.add('show-tab');
-            toast('🏥 로그인 성공!');
-            goTab(8);
-          } else {
-            toast('✅ 로그인 성공! 환영합니다.');
-            goTab(2);
-          }
-        } catch(e2) {
-          toast('✅ 로그인 성공!');
-          goTab(2);
-        }
-      } catch(e) {
-        var msg = {
-          'auth/wrong-password':'비밀번호가 틀렸어요.',
-          'auth/user-not-found':'등록되지 않은 이메일이에요.',
-          'auth/invalid-credential':'이메일 또는 비밀번호가 올바르지 않아요.',
-          'auth/too-many-requests':'잠시 후 다시 시도해주세요.'
-        };
-        toast('❌ ' + (msg[e.code] || e.message));
-      }
-    } else {
-      toast('❌ Firebase 연결 중입니다. 잠시 후 다시 시도해주세요.');
-    }
-  }
+  // 전역 함수 미리 정의 (module 로드 전 클릭 대비)
+  function go(n) { if(window._goTab) window._goTab(n); }
+  function goTab(n) { if(window._goTab) window._goTab(n); }
+  function openSheet(id) { if(window._openSheet) window._openSheet(id); else { const el=document.getElementById(id); if(el) el.style.display='flex'; } }
+  function closeSheet(id) { if(window._closeSheet) window._closeSheet(id); else { const el=document.getElementById(id); if(el) el.style.display='none'; } }
+  function toast(msg) { if(window._toast) window._toast(msg); else console.log(msg); }
 
   function _loadKakaoSDK(cb) {
     if (window.Kakao && Kakao.isInitialized()) { cb(); return; }
@@ -1647,7 +1521,7 @@ html, body {
               <div style="background:#FEF9EC;border:1px solid #FDE68A;border-radius:14px;padding:14px 16px;margin-bottom:14px">
                 <div style="font-size:11px;font-weight:700;color:#92400E;margin-bottom:6px">🔑 관리자 로그인 정보</div>
                 <div style="font-size:12px;color:#78350F;line-height:1.8">
-                  이메일: <b><a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="91f0f5fcf8ffd1f0ffe2f8fcf2f0e3f4bffae3">[email&#160;protected]</a></b><br>
+                  이메일: <b>admin@ansimcare.kr</b><br>
                   비밀번호: <b>ansim2024!</b><br>
                   <span style="font-size:10px;color:#B45309">※ 실제 서비스 전 반드시 변경하세요</span>
                 </div>
@@ -1903,14 +1777,14 @@ html, body {
           <div style="background:#F0FDF4;border-radius:10px;padding:12px;margin-bottom:14px;font-size:12px;color:#4A6358">
             • 개인정보 열람, 수정, 삭제 요청 가능<br>
             • 회원 탈퇴 시 즉시 삭제 처리<br>
-            • 문의: <a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="accdc8c1c5c2eccdc2dfc5c1cfcddec982c7de">[email&#160;protected]</a>
+            • 문의: admin@ansimcare.kr
           </div>
 
           <div style="font-weight:700;color:#2D6A4F;margin-bottom:6px">7. 개인정보보호책임자</div>
           <div style="background:#F0FDF4;border-radius:10px;padding:12px;margin-bottom:14px;font-size:12px;color:#4A6358">
             • 서비스명: 안심케어<br>
             • 담당자: 안심케어 운영팀<br>
-            • 이메일: <a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="3352575e5a5d73525d405a5e505241561d5841">[email&#160;protected]</a><br>
+            • 이메일: admin@ansimcare.kr<br>
             • 서비스 지역: 광주·전남·전북
           </div>
 
@@ -2168,7 +2042,7 @@ html, body {
   </div><!-- /phone-screen -->
 </div><!-- /phone-frame -->
 
-<script>
+<script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script><script>
 // ── 카카오 로그인 ──
 function kakaoLogin() {
   const modal = document.getElementById('kakao-modal');
@@ -2440,22 +2314,12 @@ async function loadFacilities() {
           // active가 true인 기관만 표시 (false면 미입점)
           if (d.active === true) {
             // type 정규화: Firebase에 다양한 이름으로 저장됐을 수 있음
-            // clcd 코드로 우선 분류 (가장 정확), 없으면 type 문자열로 보완
-            const clcd1 = (d.clcd || '').toUpperCase();
-            let facType = '';
-            if (clcd1 === 'A01' || clcd1 === 'A02') facType = '요양원';
-            else if (clcd1.startsWith('A')) facType = '요양병원';
-            else if (clcd1 === 'B03' || clcd1 === 'B04') facType = '주야간보호';
-            else if (clcd1 === 'B01' || clcd1 === 'B02' || clcd1 === 'B05' || clcd1.startsWith('B')) facType = '재가방문요양';
-            else {
-              // clcd 없으면 기관명/type 텍스트로 분류
-              const raw = d.type || d.n || '';
-              if (raw.includes('요양병원')) facType = '요양병원';
-              else if (raw.includes('주야간') || raw.includes('주·야간') || raw.includes('주간보호') || raw.includes('야간보호')) facType = '주야간보호';
-              else if (raw.includes('재가') || raw.includes('방문요양') || raw.includes('방문목욕') || raw.includes('재가복지') || raw.includes('재가노인복지') || raw.includes('노인복지센터')) facType = '재가방문요양';
-              else if (raw.includes('요양원') || raw.includes('노인요양시설') || raw.includes('노인가정요양')) facType = '요양원';
-              else facType = '요양원';
-            }
+            let facType = d.type || '';
+            if (facType.includes('요양병원')) facType = '요양병원';
+            else if (facType.includes('주야간') || facType.includes('주·야간')) facType = '주야간보호';
+            else if (facType.includes('재가') || facType.includes('방문요양')) facType = '재가방문요양';
+            else if (facType.includes('요양원') || facType.includes('노인요양')) facType = '요양원';
+            else facType = '요양원';
             firebaseFacs.push({
               id:      doc.id,
               type:    facType,
@@ -3328,20 +3192,12 @@ async function loadFacilitiesForSigungu(sigungu) {
         const dbSigungu = (d.sigungu || '').replace(/시$|군$|구$/, '');
         const selSigungu = sigungu.replace(/시$|군$|구$/, '');
         if (d.active === true && dbSigungu === selSigungu) {
-          const clcd2 = (d.clcd || '').toUpperCase();
-          let fType = '';
-          if (clcd2 === 'A01' || clcd2 === 'A02') fType = '요양원';
-          else if (clcd2.startsWith('A')) fType = '요양병원';
-          else if (clcd2 === 'B03' || clcd2 === 'B04') fType = '주야간보호';
-          else if (clcd2 === 'B01' || clcd2 === 'B02' || clcd2 === 'B05' || clcd2.startsWith('B')) fType = '재가방문요양';
-          else {
-            const raw2 = d.type || d.n || '';
-            if (raw2.includes('요양병원')) fType = '요양병원';
-            else if (raw2.includes('주야간') || raw2.includes('주·야간') || raw2.includes('주간보호') || raw2.includes('야간보호')) fType = '주야간보호';
-            else if (raw2.includes('재가') || raw2.includes('방문요양') || raw2.includes('방문목욕') || raw2.includes('재가복지') || raw2.includes('재가노인복지') || raw2.includes('노인복지센터')) fType = '재가방문요양';
-            else if (raw2.includes('요양원') || raw2.includes('노인요양시설') || raw2.includes('노인가정요양')) fType = '요양원';
-            else fType = '요양원';
-          }
+          let fType = d.type || '';
+          if (fType.includes('요양병원')) fType = '요양병원';
+          else if (fType.includes('주야간') || fType.includes('주·야간')) fType = '주야간보호';
+          else if (fType.includes('재가') || fType.includes('방문요양')) fType = '재가방문요양';
+          else if (fType.includes('요양원') || fType.includes('노인요양')) fType = '요양원';
+          else fType = '요양원';
           firebaseFacs.push({
             id:      doc.id,
             type:    fType,
@@ -3830,21 +3686,12 @@ async function loadAdminFacList() {
       snap.forEach(doc => {
         const d = doc.data();
         const raw = doc.data();
-    const clcd3 = (raw.clcd || '').toUpperCase();
-    let nType = '';
-    if (clcd3 === 'A01' || clcd3 === 'A02') nType = '요양원';
-    else if (clcd3.startsWith('A')) nType = '요양병원';
-    else if (clcd3 === 'B03' || clcd3 === 'B04') nType = '주야간보호';
-    else if (clcd3 === 'B01' || clcd3 === 'B02' || clcd3 === 'B05' || clcd3.startsWith('B')) nType = '재가방문요양';
-    else {
-      const raw3 = raw.type || raw.n || '';
-      if (raw3.includes('요양병원')) nType = '요양병원';
-      else if (raw3.includes('주야간') || raw3.includes('주·야간') || raw3.includes('주간보호') || raw3.includes('야간보호')) nType = '주야간보호';
-      else if (raw3.includes('재가') || raw3.includes('방문요양') || raw3.includes('방문목욕') || raw3.includes('재가복지') || raw3.includes('재가노인복지') || raw3.includes('노인복지센터')) nType = '재가방문요양';
-      else if (raw3.includes('요양원') || raw3.includes('노인요양시설') || raw3.includes('노인가정요양')) nType = '요양원';
-      else nType = '요양원';
-    }
-    window._adminFacAll.push({ id: doc.id, ...raw, type: nType, _displayType: nType });
+    let nType = raw.type || '';
+    if (nType.includes('요양병원')) nType = '요양병원';
+    else if (nType.includes('주야간') || nType.includes('주·야간')) nType = '주야간보호';
+    else if (nType.includes('재가') || nType.includes('방문요양')) nType = '재가방문요양';
+    else if (nType.includes('요양원') || nType.includes('노인요양')) nType = '요양원';
+    window._adminFacAll.push({ id: doc.id, ...raw, _displayType: nType });
       });
     }
     updateCount();
@@ -3864,9 +3711,9 @@ function filterAdminFacList() {
   function normalizeType(t) {
     t = t || '';
     if (t.includes('요양병원')) return '요양병원';
-    if (t.includes('주야간') || t.includes('주·야간') || t.includes('주간보호') || t.includes('야간보호')) return '주야간보호';
-    if (t.includes('재가') || t.includes('방문요양') || t.includes('방문목욕') || t.includes('재가복지') || t.includes('재가노인복지') || t.includes('노인복지센터')) return '재가방문요양';
-    if (t.includes('요양원') || t.includes('노인요양시설') || t.includes('노인가정요양')) return '요양원';
+    if (t.includes('주야간') || t.includes('주·야간')) return '주야간보호';
+    if (t.includes('재가') || t.includes('방문요양')) return '재가방문요양';
+    if (t.includes('요양원') || t.includes('노인요양')) return '요양원';
     return t;
   }
 
@@ -4431,4 +4278,22 @@ window.addEventListener('beforeinstallprompt', e => {
 function installPwa() {
   if (!_deferredPrompt) {
     toast('💡 브라우저 주소창의 설치 버튼을 눌러주세요.');
-    ret
+    return;
+  }
+  _deferredPrompt.prompt();
+  _deferredPrompt.userChoice.then(result => {
+    if (result.outcome === 'accepted') toast('✅ 안심케어가 설치되었습니다!');
+    _deferredPrompt = null;
+    const wrap = document.getElementById('pwa-install-wrap');
+    if (wrap) wrap.style.display = 'none';
+  });
+}
+
+window.addEventListener('appinstalled', () => {
+  toast('🎉 안심케어 앱 설치 완료!');
+  _deferredPrompt = null;
+});
+
+
+</script>
+</body></html>
