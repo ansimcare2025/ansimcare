@@ -430,10 +430,9 @@ html, body {
 <!-- ★ 카카오 SDK (CDN 자동 로드) -->
 <script>
   // 전역 함수 미리 정의 (module 로드 전 클릭 대비)
-  function go(n) { if(window._goTab) window._goTab(n); }
-  function goTab(n) { if(window._goTab) window._goTab(n); }
-  function openSheet(id) { if(window._openSheet) window._openSheet(id); else { const el=document.getElementById(id); if(el) el.style.display='flex'; } }
-  function closeSheet(id) { if(window._closeSheet) window._closeSheet(id); else { const el=document.getElementById(id); if(el) el.style.display='none'; } }
+  function go(n) { if(typeof goTab === 'function') goTab(n); else window._pendingTab = n; }
+  function openSheet(id) { const el=document.getElementById(id); if(el) el.style.display='flex'; }
+  function closeSheet(id) { const el=document.getElementById(id); if(el) el.style.display='none'; }
   function toast(msg) { if(window._toast) window._toast(msg); else console.log(msg); }
 
   function _loadKakaoSDK(cb) {
