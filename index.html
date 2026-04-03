@@ -3376,6 +3376,8 @@ function go(n) {
   goTab(n);
 }
 
+   window.goTab = goTab;
+window.go = go;
 // ── 마이페이지 업데이트 ──
 function updateMyPage() {
   const nameEl = document.getElementById('my-name');
