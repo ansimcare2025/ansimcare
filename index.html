@@ -429,10 +429,23 @@ html, body {
 </style>
 <!-- ★ 카카오 SDK (CDN 자동 로드) -->
 <script>
-  // 전역 함수 미리 정의 (module 로드 전 클릭 대비)
-  function go(n) { if(typeof goTab === 'function') goTab(n); else window._pendingTab = n; }
-  function openSheet(id) { const el=document.getElementById(id); if(el) el.style.display='flex'; }
-  function closeSheet(id) { const el=document.getElementById(id); if(el) el.style.display='none'; }
+ function goTab(n) {
+    var pages = document.querySelectorAll('.page');
+    pages.forEach(function(p) { p.classList.remove('active'); p.style.animation = ''; });
+    var next = document.getElementById('p' + n);
+    if (!next) return;
+    next.style.animation = 'slideIn .28s cubic-bezier(.4,0,.2,1)';
+    next.classList.add('active');
+    var sa = document.getElementById('scroll-area');
+    if (sa) sa.scrollTop = 0;
+    var TAB_MAP = { 0:'tab-home', 2:'tab-info', 3:'tab-psych', 4:'tab-match', 5:'tab-guide', 6:'tab-my', 7:'tab-admin', 8:'tab-facility' };
+    document.querySelectorAll('.tab-item').forEach(function(t) { t.classList.remove('active'); });
+    var tabId = TAB_MAP[n];
+    if (tabId) { var tb = document.getElementById(tabId); if(tb) tb.classList.add('active'); }
+  }
+  function go(n) { goTab(n); }
+  function openSheet(id) { var el=document.getElementById(id); if(el) el.style.display='flex'; }
+  function closeSheet(id) { var el=document.getElementById(id); if(el) el.style.display='none'; }
   function toast(msg) { if(window._toast) window._toast(msg); else console.log(msg); }
 
   function _loadKakaoSDK(cb) {
