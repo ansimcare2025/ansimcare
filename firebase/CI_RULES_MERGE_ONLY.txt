@@ -1,0 +1,14 @@
+Firestore 운영 규칙 안내
+
+기존 Firebase 프로젝트(ansimcare-9bae3)의 전체 firestore.rules를 교체하지 마세요.
+기존 사용 중인 규칙을 백업한 후, ci_ 접두사 컬렉션에 대해서만 아래 정책을 기존 service cloud.firestore의 match /databases/{database}/documents 블록 안에 병합하세요.
+
+match /ci_facilities/{doc} { allow read, write: if false; }
+match /ci_public/{doc} { allow read, write: if false; }
+match /ci_users/{doc} { allow read, write: if false; }
+match /ci_requests/{doc} { allow read, write: if false; }
+match /ci_quotas/{doc} { allow read, write: if false; }
+match /ci_audit/{doc} { allow read, write: if false; }
+
+주의: Firestore 규칙이 ci_* 상위 컬렉션을 허용하면 안 됩니다. Firebase Admin SDK만 해당 컬렉션에 접근합니다.
+기존 /{document=**} 규칙과 다른 모든 컬렉션은 기존 상태로 유지하세요.

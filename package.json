@@ -1,0 +1,16 @@
+{
+  "name": "careindex-honam",
+  "version": "2.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "firebase-admin": "^13.5.0"
+  },
+  "scripts": {
+    "test": "node --test tests/*.test.mjs",
+    "check": "node --check netlify/functions/api.mjs && node --check netlify/functions/kakao-start.mjs && node --check netlify/functions/kakao-callback.mjs && node --check site/app.js"
+  }
+}

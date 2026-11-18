@@ -1,0 +1,17 @@
+[build]
+  publish = "site"
+  command = "echo careindex-static-and-functions"
+  functions = "netlify/functions"
+[functions]
+  node_bundler = "esbuild"
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    X-Frame-Options = "DENY"
+    Permissions-Policy = "camera=(), microphone=(), geolocation=()"
+[[headers]]
+  for = "/config.js"
+  [headers.values]
+    Cache-Control = "no-store"
