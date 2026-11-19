@@ -12,6 +12,8 @@ match /ci_audit/{doc} { allow read, write: if false; }
 match /ci_assessment_reports/{doc} { allow read, write: if false; }
 match /ci_assessment_states/{doc} { allow read, write: if false; }
 match /ci_public_assessments/{doc} { allow read, write: if false; }
+match /ci_field_inspection_drafts/{doc} { allow read, write: if false; }
+match /ci_public_field_inspections/{doc} { allow read, write: if false; }
 
 주의: Firestore 규칙이 ci_* 상위 컬렉션을 허용하면 안 됩니다. Firebase Admin SDK만 해당 컬렉션에 접근합니다.
 기존 /{document=**} 규칙과 다른 모든 컬렉션은 기존 상태로 유지하세요.

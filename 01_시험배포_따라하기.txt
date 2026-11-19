@@ -1,0 +1,15 @@
+돌봄지음 호남 v2.7 · 시험 배포 업로드 절차 (GitHub 화면 기준)
+
+1. 먼저 돌봄지음 v2.7 통합 미리보기 HTML을 내려받아 더블클릭합니다.
+2. GitHub https://github.com/ansimcare2025/ansimcare/tree/dolbom-v25-test 에 접속합니다.
+3. 왼쪽 위 브랜치가 dolbom-v25-test 인지 확인합니다. careindex-v2는 변경하지 마세요.
+4. GitHub 업로드 전용 ZIP 압축을 풀고, 안에 있는 site / netlify / firebase / tests / scripts 와 netlify.toml / package.json 을 한꺼번에 업로드합니다.
+   ZIP 파일 자체를 올리지 않습니다. 폴더 구조를 그대로 유지합니다.
+5. GitHub [Add file] → [Upload files] → 모든 파일 확인 → [Commit changes] (dolbom-v25-test 직접 저장).
+6. Netlify careindex-honam → Deploys 에서 자동으로 만들어진 Branch Deploy를 확인합니다. 설정을 다시 만들 필요가 없습니다.
+7. Branch Deploy는 운영 데이터 보호를 위해 서버가 읽기 전용입니다. 임시저장/결제신청/계약승인 등의 실제 쓰기 동작은 오프라인 미리보기에서만 연습합니다.
+8. 카카오 로그인 복귀 주소·기관 권한·환경변수 요금 설정·모바일 호환성 등을 검토합니다.
+9. 운영 사이트 전환은 별도 승인과 백업, 실데이터 통합검증 이후 진행합니다. 시험 배포 상세화면에서 Publish deploy 버튼은 누르지 마세요.
+
+중요: 운영 DB는 Firebase 프로젝트를 공유할 수 있습니다. 시험 Netlify 컨텍스트의 쓰기 API가 차단되도록 설계했습니다.
+전자결제 PG 연결과 수납 자동확인, 계약서/환불정책/세무·개인정보 검토가 끝나기 전까지 실거래 결제 시스템으로 소개하면 안 됩니다.

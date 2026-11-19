@@ -1,5 +1,7 @@
 import {createHash, randomBytes, randomUUID} from 'node:crypto';
 import {getStorage} from 'firebase-admin/storage';
+import {validateFieldDraft,publicFieldRows,FIELD_IDS} from './_shared/field-policy.mjs';
+import {invoiceAmount,normalizeOrderMonths,providerOrderView,ORDER_PENDING,ORDER_PAID,ORDER_CANCELED} from './_shared/payment-policy.mjs';
 import {DOMAINS, SUPPORTED_TYPES, addMonths, checkSelf, checkReview, publicReview, riskReleaseAllowed} from './_shared/assessment-policy.mjs';
 import { services, authUser, requireAdmin, response, wrapError, fail, txt, regions, types, getPrivatePrices, key, defaultCap, dateOK, todayKST, visible, publicFields, normalizedFacility, facilityId, audit, emailOK, ensureLocation, ensureType } from './_shared/core.mjs';
 const sRef=(s,id)=>s.db.collection('ci_facilities').doc(id);
@@ -341,14 +343,132 @@ async function publicAssessment(s,b){
   if(v.nextAnnualDue<today)return {assessment:{reviewedDate:v.reviewedDate,expired:true},notice:'이전 점검 결과의 재확인 시점이 경과했습니다. 최근 결과를 다시 확인 중입니다.'};
   return {assessment:{reviewedDate:v.reviewedDate,nextAnnualDue:v.nextAnnualDue,rows:v.rows,expired:false},notice:'돌봄지음 자체 확인정보이며 공적 인증이나 서비스 품질 보증이 아닙니다.'};
 }
+
+// [v2.6] 현장점검. 관리자 내부 메모와 보호자 공개용 문장을 물리적으로 분리합니다.
+const fieldDraftRef=(s,id)=>s.db.collection('ci_field_inspection_drafts').doc(id);
+const fieldPublicRef=(s,id)=>s.db.collection('ci_public_field_inspections').doc(id);
+async function adminFieldState(s,u,b){requireAdmin(u);
+  const id=txt(b.facilityId,90);if(!id)fail(400,'기관을 먼저 선택하세요.');
+  const f=await readFacility(s,id);
+  const [draft,publicDoc,state]=await Promise.all([fieldDraftRef(s,id).get(),fieldPublicRef(s,id).get(),s.db.collection('ci_assessment_states').doc(id).get()]);
+  return {facility:{id,name:f.name,type:f.type,region:f.region,district:f.district},draft:draft.exists?draft.data():null,published:publicDoc.exists?{visitedDate:publicDoc.data().visitedDate,publishedDate:publicDoc.data().publishedDate}:null,riskHold:state.data()?.riskHold===true};
+}
+async function adminSaveField(s,u,b){requireAdmin(u);
+  const id=txt(b.facilityId,90);if(!id)fail(400,'기관을 먼저 선택하세요.');
+  const f=await readFacility(s,id);
+  if(!['요양병원','요양원'].includes(f.type))fail(400,'29개 세부점검은 현재 요양병원·요양원에 적용합니다.');
+  let v;try{v=validateFieldDraft(b);}catch(e){fail(400,e.message);}
+  const ref=fieldDraftRef(s,id),stateRef=s.db.collection('ci_assessment_states').doc(id);
+  const riskDomains=[...new Set(v.concerns.map(x=>x.split('-')[0]))];
+  await s.db.runTransaction(async tx=>{
+    const state=await tx.get(stateRef);
+    tx.set(ref,{facilityId:id,facilityName:f.name,visitedDate:v.visitedDate,rows:v.rows,internalGeneral:v.internalGeneral,editStatus:v.concerns.length?'risk_hold':'draft',updatedBy:u.uid,updatedAt:s.FieldValue.serverTimestamp()});
+    if(v.concerns.length){
+      const previous=Array.isArray(state.data()?.riskDomains)?state.data().riskDomains:[];
+      tx.set(stateRef,{facilityId:id,riskHold:true,status:'safety_hold',riskDomains:[...new Set([...previous,...riskDomains])],updatedAt:s.FieldValue.serverTimestamp()},{merge:true});
+      tx.update(sRef(s,id),{publicationStatus:'pending',updatedAt:s.FieldValue.serverTimestamp()});
+      tx.delete(s.db.collection('ci_public').doc(id));
+      tx.delete(fieldPublicRef(s,id));
+    }
+  });
+  await audit(s,u.uid,'field_inspection_save',id,{visitedDate:v.visitedDate,checked:v.verified,risky:v.concerns.length>0});
+  return {saved:true,publicationPaused:v.concerns.length>0,verified:v.verified};
+}
+async function adminPublishField(s,u,b){requireAdmin(u);
+  const id=txt(b.facilityId,90);if(!id)fail(400,'기관을 먼저 선택하세요.');
+  const f=await readFacility(s,id);
+  if(!['요양병원','요양원'].includes(f.type))fail(400,'해당 기관 유형은 세부 현장점검 지원 전입니다.');
+  const draftRef=fieldDraftRef(s,id),ref=fieldPublicRef(s,id),stateRef=s.db.collection('ci_assessment_states').doc(id);
+  const today=todayKST();
+  await s.db.runTransaction(async tx=>{
+    const [draft,state,pub]=await Promise.all([tx.get(draftRef),tx.get(stateRef),tx.get(s.db.collection('ci_public').doc(id))]);
+    if(!draft.exists)fail(404,'저장된 현장점검 초안이 없습니다.');
+    let v;try{v=validateFieldDraft(draft.data(),{publish:true});}catch(e){fail(400,e.message);}
+    if(v.concerns.length)fail(409,'우려 기록이 있는 점검표는 공개할 수 없습니다. 보완 확인과 게시보류 검토가 필요합니다.');
+    if(state.data()?.riskHold===true)fail(409,'안전·인권 관련 게시보류 상태입니다. 기존 심사 검토에서 해제 근거를 확인한 후에 공개하세요.');
+    // 기초 기관정보, 수납, 계약, 게시는 별도 승인 절차입니다.
+    if(!pub.exists||!visible(f))fail(409,'계약·입금·게시 승인이 완료된 공개 참여기관에만 점검결과를 게시할 수 있습니다. 초안은 유지됩니다.');
+    const publicRows=publicFieldRows(v.rows);
+    tx.set(ref,{facilityId:id,visitedDate:v.visitedDate,publishedDate:today,nextReviewDate:addMonths(v.visitedDate,12),rows:publicRows,confirmedByAdmin:true,schemaVersion:'2.6'});
+    tx.update(draftRef,{editStatus:'published',publishedDate:today,publishedBy:u.uid,updatedAt:s.FieldValue.serverTimestamp()});
+  });
+  await audit(s,u.uid,'field_inspection_publish',id,{date:today});
+  return {published:true,date:today};
+}
+async function publicFieldInspection(s,b){
+  const id=txt(b.facilityId,90);if(!id)fail(400,'기관 ID가 필요합니다.');
+  const [fac,doc,state]=await Promise.all([s.db.collection('ci_public').doc(id).get(),fieldPublicRef(s,id).get(),s.db.collection('ci_assessment_states').doc(id).get()]);
+  const f=fac.data(),today=todayKST();
+  if(!f||f.advertisement!==true||!f.contractStart||f.contractStart>today||f.contractEnd<today||state.data()?.riskHold===true)fail(404,'현재 공개된 참여기관이 아닙니다.');
+  if(!doc.exists||doc.data()?.confirmedByAdmin!==true)return {inspection:null,notice:'공개 승인된 세부 현장점검 자료가 없습니다. 모든 항목은 미확인으로 표시됩니다.'};
+  const data=doc.data();
+  if(!data.nextReviewDate||data.nextReviewDate<today)return {inspection:null,notice:'지난 현장점검 자료의 재확인 시점이 경과했습니다. 현재 다시 확인 중입니다.'};
+  return {inspection:{visitedDate:data.visitedDate,publishedDate:data.publishedDate,nextReviewDate:data.nextReviewDate,rows:publicFieldRows(data.rows)},notice:'자체 점검정보입니다. 국가 인증·품질보증은 아닙니다.'};
+}
+
+// [v2.7] 기관 전용 결제 신청. 전자결제/수납 자동확정이 아니라 수동 입금·계약 검토 대기입니다.
+const paymentOrders=s=>s.db.collection('ci_payment_orders');
+const orderDate=todayKST;
+async function facilityOrderQuote(s,u,b){
+  const f=await getMy(s,u);
+  const months=normalizeOrderMonths(b.months);
+  const quota=await privateQuota(s,u,{});
+  const monthlyPrice=getPrivatePrices()[f.type];
+  return {facilityId:f.id,facilityName:f.name,facilityType:f.type,region:f.region,district:f.district,months,monthlyPrice,estimatedAmount:invoiceAmount(months,monthlyPrice),quota:{capacity:quota.capacity,active:quota.active,remaining:quota.remaining},taxNote:'예상 홍보료입니다. 부가세·세금계산서·최종 계약조건은 계약서 및 담당자 안내를 확인하세요.',methods:[{id:'manual_transfer',name:'무통장입금 신청(담당자 확인 후 안내)'},{id:'card',name:'신용카드 결제(PG 계약·심사 후 제공)',enabled:false}]};
+}
+async function facilityCreateOrder(s,u,b){
+  const f=await getMy(s,u),months=normalizeOrderMonths(b.months);
+  if(b.method!=='manual_transfer')fail(400,'현재는 무통장입금 신청만 가능합니다. 신용카드 결제는 준비 중입니다.');
+  if(b.acknowledged!==true)fail(400,'신청과 실제 결제 완료가 다르다는 안내를 확인하세요.');
+  const quote=await facilityOrderQuote(s,u,{months});
+  if(quote.quota.remaining<=0)fail(409,'해당 지역의 홍보 정원이 모두 찼습니다. 관리자와 별도 상담해 주세요.');
+  const note=txt(b.note,300);
+  const existing=await paymentOrders(s).where('facilityId','==',f.id).limit(60).get();
+  const pending=existing.docs.find(d=>d.data().status===ORDER_PENDING);
+  if(pending)return {order:providerOrderView({id:pending.id,...pending.data()}),existing:true,message:'이미 접수된 신청이 있습니다. 다시 신청하지 않아도 됩니다.'};
+  const id='DJ-'+Date.now().toString(36).toUpperCase()+'-'+randomBytes(4).toString('hex').toUpperCase();
+  const data={facilityId:f.id,facilityName:f.name,facilityType:f.type,region:f.region,district:f.district,months,monthlyPrice:quote.monthlyPrice,estimatedAmount:quote.estimatedAmount,method:'manual_transfer',status:ORDER_PENDING,requestDate:orderDate(),createdBy:u.uid,note,createdAt:s.FieldValue.serverTimestamp()};
+  await paymentOrders(s).doc(id).create(data);
+  await audit(s,u.uid,'payment_application',f.id,{orderId:id,months,estimatedAmount:quote.estimatedAmount});
+  return {order:providerOrderView({id,...data}),existing:false,message:'신청 접수 완료. 입금계좌와 최종 계약조건은 관리자 확인 후 별도로 안내합니다. 아직 결제된 상태가 아닙니다.'};
+}
+async function facilityMyOrders(s,u){
+  const f=await getMy(s,u);
+  const snap=await paymentOrders(s).where('facilityId','==',f.id).limit(60).get();
+  return {items:snap.docs.map(d=>providerOrderView({id:d.id,...d.data()})).sort((a,b)=>b.id.localeCompare(a.id))};
+}
+async function adminPaymentOrders(s,u){requireAdmin(u);
+  const snap=await paymentOrders(s).orderBy('__name__','desc').limit(150).get();
+  return {items:snap.docs.map(d=>providerOrderView({id:d.id,...d.data()}))};
+}
+async function adminReviewPaymentOrder(s,u,b){requireAdmin(u);
+  const orderId=txt(b.orderId,120),decision=txt(b.decision,35),reference=txt(b.reference,160);
+  if(![ORDER_PAID,ORDER_CANCELED].includes(decision))fail(400,'지원하지 않는 입금 검토 상태입니다.');
+  if(decision===ORDER_PAID&&(!b.confirmedActualReceipt||reference.length<5))fail(400,'실제 계좌 입금을 확인했는지 체크하고 수납 확인번호를 입력하세요.');
+  const ref=paymentOrders(s).doc(orderId);
+  const ret=await s.db.runTransaction(async tx=>{
+    const snap=await tx.get(ref);if(!snap.exists)fail(404,'신청내역이 없습니다.');
+    const order=snap.data();if(order.status!==ORDER_PENDING)fail(409,'이미 처리된 신청입니다.');
+    tx.update(ref,{status:decision,reviewedBy:u.uid,reviewedDate:orderDate(),paymentReference:decision===ORDER_PAID?reference:'',reviewedAt:s.FieldValue.serverTimestamp()});
+    return {orderId,status:decision,facilityId:order.facilityId,facilityName:order.facilityName};
+  });
+  await audit(s,u.uid,'payment_review',ret.facilityId,{orderId,decision});
+  return {...ret,notice:decision===ORDER_PAID?'신청 건의 실제 입금 확인을 기록했습니다. 게시 승인과 광고 계약 활성화는 별도 관리 화면에서 진행해야 합니다.':'신청이 취소되었습니다.'};
+}
+
 export async function handler(event){
   try{
     const method=event.httpMethod;
     if(method!=='GET'&&method!=='POST')return response(405,{ok:false,error:'허용되지 않는 방식입니다.'});
     const body=method==='POST'?getBody(event):(event.queryStringParameters||{}),action=txt(body.action,60);
+    // Netlify branch-deploy는 운영 DB와 환경변수를 공유할 수 있으므로 반드시 읽기 전용.
+    // 관리자/기관이라고 해도 지점별 자료수정·입금확인·신청등록을 시험 주소에서는 차단합니다.
+    const stagingReadActions=new Set(['my_account','my_facility','private_quota','private_plan_prices','requests','my_assessment_state','admin_field_state','admin_pending_assessments','admin_list','admin_quotas','facility_order_quote','facility_my_orders','admin_payment_orders']);
+    if(process.env.CONTEXT!=='production' && method==='POST' && !stagingReadActions.has(action))fail(403,'시험 배포 사이트는 운영자료 보호를 위해 읽기 전용입니다. 입력 동작은 동봉된 오프라인 미리보기에서 시험하세요.');
     const s=services();
     if(method==='GET'&&action==='public_list')return response(200,{ok:true,items:await listPublic(s,body)});
     if(method==='GET'&&action==='public_assessment')return response(200,{ok:true,...await publicAssessment(s,body)});
+    if(method==='GET'&&action==='public_field_inspection')return response(200,{ok:true,...await publicFieldInspection(s,body)});
 
     const u=await authUser(event,s);
     let result;
@@ -364,8 +484,16 @@ export async function handler(event){
         break;
       }
       case 'my_facility': result={facility:await getMy(s,u)};break;
+      case 'facility_order_quote': result=await facilityOrderQuote(s,u,body);break;
+      case 'facility_create_order': result=await facilityCreateOrder(s,u,body);break;
+      case 'facility_my_orders': result=await facilityMyOrders(s,u);break;
+      case 'admin_payment_orders': result=await adminPaymentOrders(s,u);break;
+      case 'admin_review_payment_order': result=await adminReviewPaymentOrder(s,u,body);break;
       case 'submit_self_assessment': result=await submitSelfAssessment(s,u,body);break;
       case 'my_assessment_state': result=await selfAssessmentState(s,u);break;
+      case 'admin_field_state':result=await adminFieldState(s,u,body);break;
+      case 'admin_field_save':result=await adminSaveField(s,u,body);break;
+      case 'admin_field_publish':result=await adminPublishField(s,u,body);break;
       case 'admin_pending_assessments': result={items:await listAssessmentPending(s,u)};break;
       case 'admin_review_assessment': result=await adminReviewAssessment(s,u,body);break;
       case 'admin_list':requireAdmin(u);result=await listAdmin(s,body);break;

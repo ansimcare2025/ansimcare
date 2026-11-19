@@ -22,3 +22,35 @@ body{overflow-x:hidden}.hero h2{letter-spacing:-1px}.status{font-size:11px}.main
  .footer{padding-bottom:175px}
 }
 @media(max-width:360px){.travel-nav{padding-left:8px;padding-right:8px;gap:6px}.travel-nav .travel-btn{font-size:12px}}
+
+/* v2.5.1: 보호자가 실제 9영역 세부질문 32개를 펼쳐서 열람하고 개인 확인 표시 */
+.public-check-intro{margin-bottom:17px}.public-check-intro h3{margin-top:0}.public-check-intro p{line-height:1.8}
+.standard-tools{display:flex;align-items:center;gap:12px;justify-content:space-between;flex-wrap:wrap;margin-top:12px}.standard-tools strong{color:#265642;font-size:14px}
+.public-standard-grid{align-items:start}.public-standard-card{padding:0!important;overflow:hidden}.public-standard-card summary{display:flex;align-items:center;gap:13px;padding:21px 21px;cursor:pointer;list-style:none;min-height:112px}.public-standard-card summary::-webkit-details-marker{display:none}.public-standard-card[open] summary{border-bottom:1px solid #e3eae3;background:#f6faf6}.public-standard-card summary:focus-visible{outline:3px solid #d1946f;outline-offset:-3px}
+.public-standard-title{flex:1;min-width:0;display:flex;flex-direction:column;gap:5px}.public-standard-title strong{font-size:18px;color:#173e30}.public-standard-title small{font-size:12px;line-height:1.55;color:#5e7164;font-weight:400}
+.public-standard-action{font-weight:800;color:#2b624a;font-size:12px;white-space:nowrap}.public-standard-card[open] .public-standard-action{color:#9c6842}.public-standard-reflection{border-color:#e8d7ba!important;background:#fffdfa}
+.public-question-list{list-style-type:decimal;margin:0;padding:7px 22px 14px 42px}.public-question{padding:13px 0;border-bottom:1px solid #e9efe9;line-height:1.55}.public-question:last-child{border-bottom:0}.public-question-main strong{font-size:14px;color:#214938}.public-question-main p{font-size:12px;line-height:1.7;margin:5px 0 9px;color:#576d5e}
+.public-check-label{display:inline-flex;align-items:center;gap:7px;font-size:12px;font-weight:700;color:#235a40;cursor:pointer;background:#f2f8f2;border:1px solid #d5e5d7;border-radius:10px;padding:7px 11px}.public-check-label input{accent-color:#1a6246;width:16px;height:16px;margin:0}.public-reflection-note{margin:15px 21px 0;font-size:12px;line-height:1.7;color:#8b603f}
+@media(max-width:800px){.public-standard-card summary{padding:16px 12px;min-height:94px;flex-wrap:wrap;gap:9px}.public-standard-action{width:100%;text-align:right}.public-question-list{padding:7px 14px 12px 31px}.public-standard-title strong{font-size:16px}.standard-tools{align-items:stretch;flex-direction:column}}
+
+
+/* v2.5.2: 기관 심사결과와 보호자 개인판단 구분 / 모바일 3지 선택 */
+.standard-separation{margin-bottom:14px;align-items:stretch}
+.standard-separation .panel{padding:20px;background:#fff;margin:0}
+.standard-separation .guardian-personal-panel{border:1px solid #c9decd;background:#f6faf6}
+.standard-separation .guardian-reviewed-panel{border:1px solid #e5d8c8;background:#fffdfa}
+.standard-separation h3{font-size:17px;margin:12px 0 6px;color:#173f30}
+.standard-separation p{font-size:12px;line-height:1.8;color:#546a5a}
+.guardian-answer{margin:9px 0 3px;padding:0;border:0;min-width:0}
+.guardian-answer legend{font-size:11px;color:#596c5f;margin-bottom:7px;font-weight:750;padding:0}
+.guardian-options{display:flex;flex-wrap:wrap;gap:7px}
+.guardian-option{display:inline-flex;align-items:center;gap:6px;cursor:pointer;padding:9px 10px;border-radius:11px;border:1px solid #d7e5d9;color:#24573e;background:#f7faf7;line-height:1.35;font-size:12px;font-weight:650;min-height:42px}
+.guardian-option:has(input:checked){border-color:#81ad91;background:#e7f5ea;color:#16482f}
+.guardian-option:has(input[value="concern"]:checked){border-color:#daa979;background:#fff1dd;color:#825018}
+.guardian-option:has(input[value="pending"]:checked){border-color:#d0d8d0;background:#f3f4f2;color:#66736a}
+.guardian-option:focus-within{outline:2px solid #c98a58;outline-offset:2px}
+.guardian-option input{accent-color:#256d4a;flex:none;width:16px;height:16px;margin:0}
+.guardian-option input[value="concern"]{accent-color:#9b661f}
+.public-standard-reflection .guardian-answer legend{color:#98653d}
+@media(max-width:850px){.standard-separation{display:grid;grid-template-columns:1fr}}
+@media(max-width:520px){.guardian-options{display:grid;grid-template-columns:1fr}.guardian-option{width:100%}.standard-tools strong{line-height:1.9}}

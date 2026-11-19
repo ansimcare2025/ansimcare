@@ -1,0 +1,14 @@
+/* 기관 로그인 전용 결제 신청 UI. 결제승인/금융정보 수집 UI가 아닙니다. */
+.payment-checkout{border:1px solid #c9dfd3;background:linear-gradient(160deg,#fff,#f7faf7)}
+.pay-receipt{background:#f3f8f5;border:1px solid #d8e5da;border-radius:18px;padding:20px;margin:18px 0}
+.pay-summary-head{display:flex;justify-content:space-between;align-items:start;gap:12px;padding-bottom:12px;border-bottom:1px solid #d2e4d9}
+.pay-summary-head div{display:grid;gap:4px}.pay-summary-head small,.pay-summary-head span,.pay-summary-foot{font-size:12px;color:#567367}
+.pay-summary-head strong{font-size:21px;color:#153d32}.pay-summary-row{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:11px 0;border-bottom:1px solid #dae9e0;font-size:14px}
+.pay-summary-row.total{border-bottom:none}.pay-summary-row.total strong{font-size:25px;color:#153d32}.pay-summary-foot{line-height:1.7;border-top:1px solid #dae9e0;padding-top:13px}
+.payment-checkout .confirm-row{align-items:flex-start;font-size:13px;line-height:1.65}
+@media(max-width:600px){.pay-receipt{padding:14px}.pay-summary-head{flex-wrap:wrap}.pay-summary-row.total strong{font-size:22px}}
+
+.payment-dialog{width:min(760px,96vw);max-width:min(760px,96vw);max-height:91vh;border:1px solid #cbdad2;border-radius:22px;padding:18px;box-shadow:0 28px 70px rgba(11,45,33,.25)}
+.payment-dialog::backdrop{background:rgba(15,38,30,.59)}
+.payment-dialog .payment-checkout{margin:0;box-shadow:none}
+@media(max-width:600px){.payment-dialog{width:98vw;max-width:98vw;padding:11px;border-radius:16px}}

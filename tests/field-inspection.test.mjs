@@ -1,0 +1,18 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {FIELD_IDS,validateFieldDraft,publicFieldRows} from '../netlify/functions/_shared/field-policy.mjs';
+const api=readFileSync(new URL('../netlify/functions/api.mjs',import.meta.url),'utf8');
+const html=readFileSync(new URL('../site/index.html',import.meta.url),'utf8');
+const rules=readFileSync(new URL('../firebase/CI_RULES_MERGE_ONLY.txt',import.meta.url),'utf8');
+const basic=()=>({visitedDate:'2026-11-19',rows:Object.fromEntries(FIELD_IDS.map(id=>[id,{source:'미확인',finding:'미확인',internalNote:'',publicSummary:''}]))});
+test('서버 29개 고정 ID 유지',()=>{assert.equal(FIELD_IDS.length,29);assert.equal(new Set(FIELD_IDS).size,29);});
+test('미확인 문항은 결과가 미확인이어야 한다',()=>{let a=basic();a.rows['environment-1'].finding='확인';assert.throws(()=>validateFieldDraft(a),/미확인/);});
+test('기관 자체보고만으로 현장 확인 표시할 수 없다',()=>{let a=basic();a.rows['environment-1']={source:'기관보고',finding:'확인',internalNote:'제출자료를 확인하였습니다',publicSummary:'기관의 설명자료가 있습니다'};assert.throws(()=>validateFieldDraft(a),/자체보고/);});
+test('확인된 사항은 근거와 공개설명 필요',()=>{let a=basic();a.rows['environment-1']={source:'현장',finding:'확인',internalNote:'공용공간에서 직접 확인함',publicSummary:''};assert.doesNotThrow(()=>validateFieldDraft(a));assert.throws(()=>validateFieldDraft(a,{publish:true}),/공개 설명/);a.rows['environment-1'].publicSummary='방문 당시 공용공간 사용 상태를 관찰함';assert.doesNotThrow(()=>validateFieldDraft(a,{publish:true}));});
+test('모든 항목 미확인 시 공개 금지',()=>{assert.throws(()=>validateFieldDraft(basic(),{publish:true}),/없습니다/);});
+test('공개 결과에 내부 메모가 복사되지 않는다',()=>{let a=basic();a.rows['dignity-1']={source:'현장',finding:'확인',internalNote:'내부 확인 메모: 공개 금지',publicSummary:'방문 당시 존칭을 사용하는 모습을 관찰함'};let out=publicFieldRows(validateFieldDraft(a).rows);assert.equal(out['dignity-1'].summary,'방문 당시 존칭을 사용하는 모습을 관찰함');assert.equal(JSON.stringify(out).includes('내부 확인 메모'),false);});
+test('미확인 상태의 공개설명은 노출시키지 않는다',()=>{let out=publicFieldRows({'staff-1':{source:'미확인',finding:'미확인',publicSummary:'오류로 넣은 텍스트'}});assert.equal(out['staff-1'].summary,'');});
+test('공개 문장 내 주민번호·전화·이메일 탐지',()=>{for(const v of ['주민 640102-1234567','연락처 010-1234-5678','test@example.com']){let a=basic();a.rows['environment-1']={source:'현장',finding:'확인',internalNote:'공간을 실제로 확인하였습니다',publicSummary:v};assert.throws(()=>validateFieldDraft(a),/개인정보/);}});
+test('관리자 접근 제어, 위험보류, 별도 공개 컬렉션',()=>{assert.match(api,/async function adminFieldState\(s,u,b\)\{requireAdmin\(u\)/);assert.match(api,/async function adminSaveField\(s,u,b\)\{requireAdmin\(u\)/);assert.match(api,/async function adminPublishField\(s,u,b\)\{requireAdmin\(u\)/);assert.match(api,/riskHold/);assert.match(api,/tx.delete\(s.db.collection\('ci_public'\).doc\(id\)\)/);for(const name of ['ci_field_inspection_drafts','ci_public_field_inspections'])assert.match(rules,new RegExp(name));assert.match(html,/id="a-field-questions"/);});
+test('공개 조회는 승인된 광고와 기간, 위험보류를 확인',()=>{assert.match(api,/async function publicFieldInspection/);assert.match(api,/state.data\(\)\?\.riskHold===true/);assert.match(api,/f.advertisement!==true/);assert.match(api,/f.contractEnd<today/);});

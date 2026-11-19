@@ -1,5 +1,5 @@
 import {initializeApp} from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
-import {ASSESSMENT_DOMAINS,GUARDIAN_REFLECTION} from './assessment-standards.js';
+import {ASSESSMENT_DOMAINS,PUBLIC_CHECKLIST,GUARDIAN_REFLECTION,GUARDIAN_REFLECTION_HINTS} from './assessment-standards.js';
 import {getAuth, onAuthStateChanged, signInWithCustomToken, signInWithEmailAndPassword, sendPasswordResetEmail, signOut} from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
 
 // User-accessible only through authenticated Netlify server functions.
@@ -76,7 +76,7 @@ function navigate(page,{fromHistory=false}={}){
   setMessage('top-title',TITLES[page]);window.scrollTo({top:0,behavior:'instant'});
   if(page==='match')loadPublic();
   if(page==='facility')loadMine();
-  if(page==='admin'){loadAdmin();loadAssessments();}
+  if(page==='admin'){loadAdmin();loadAssessments();loadAdminPaymentOrders();}
   if(page==='plans')loadPrivatePlans();
 }
 // 브라우저/휴대폰의 자체 뒤로가기와 화면 내 화살표가 같은 기록을 사용합니다.
@@ -170,23 +170,38 @@ function showPublicDetail(id){
   loadPublicAssessment(f);
 }
 
-// 보호자에게는 관리자 검토를 거친 사실 및 검증 출처만 안내합니다.
-$('public-standard-list').innerHTML=ASSESSMENT_DOMAINS.map(([id,name,desc],i)=>`<article class="panel"><span class="pill">${String(i+1).padStart(2,'0')}</span><h3 style="margin-top:9px">${esc(name)}</h3><p>${esc(desc)}</p></article>`).join('');
-$('guardian-reflection').innerHTML='<ul class="list">'+GUARDIAN_REFLECTION.map(x=>`<li>${esc(x)}</li>`).join('')+'</ul><p class="smallprint">이 질문은 보호자의 선택을 돕는 자기성찰이며 기관 평가 점수가 아닙니다.</p>';
+// 방문 전 단계: 보호자는 직접 평가하지 않고 질문과 기관별 실제 확인현황을 읽습니다.
+const standardCards=ASSESSMENT_DOMAINS.map(([id,name,desc],i)=>{
+  const questions=PUBLIC_CHECKLIST[id]||[];
+  return `<details class="panel public-standard-card" ${i===0?'open':''}><summary><span class="pill">${String(i+1).padStart(2,'0')}</span><span class="public-standard-title"><strong>${esc(name)}</strong><small>${esc(desc)}</small></span><span class="public-standard-action">점검 질문 ${questions.length}개 보기 <span aria-hidden="true">⌄</span></span></summary><ol class="public-question-list">${questions.map(([q,h])=>`<li class="public-question"><strong>${esc(q)}</strong><p>${esc(h)}</p></li>`).join('')}</ol></details>`;
+});
+standardCards.push(`<details class="panel public-standard-card public-standard-reflection"><summary><span class="pill">09</span><span class="public-standard-title"><strong>보호자의 심리적 신뢰</strong><small>개인 판단과 마음의 부담 · 기관 심사점수에서 제외</small></span><span class="public-standard-action">생각해 볼 질문 3개</span></summary><ol class="public-question-list">${GUARDIAN_REFLECTION.map((q,i)=>`<li class="public-question"><strong>${esc(q)}</strong><p>${esc(GUARDIAN_REFLECTION_HINTS[i])}</p></li>`).join('')}</ol></details>`);
+$('public-standard-list').innerHTML=standardCards.join('');
+function renderFieldPublicInspection(payload){
+  const inspection=payload?.inspection,rows=inspection?.rows||{};
+  const hasData=Boolean(inspection);
+  const groups=ASSESSMENT_DOMAINS.map(([id,name,description],i)=>{
+    const questions=PUBLIC_CHECKLIST[id]||[];
+    const entries=questions.map(([q,hint],j)=>{
+      const key=`${id}-${j+1}`,row=rows[key]||{source:'미확인',finding:'미확인',summary:''};
+      const isKnown=row.source!=='미확인'&&row.finding!=='미확인';
+      return `<div class="guardian-field-row"><strong>${esc(j+1)}. ${esc(q)}</strong><div class="field-result"><span class="field-pill ${!isKnown?'unknown':row.finding==='보완중'?'needs':''}">${esc(isKnown?row.finding:'미확인')}</span><span class="field-pill">${esc(isKnown?row.source:'확인 자료 없음')}</span></div>${row.summary?`<p class="field-note">${esc(row.summary)}</p>`:`<p class="field-note smallprint">${esc(hint)}</p>`}${isKnown?`<p class="field-checked-at">확인자료 기준일: ${esc(inspection.visitedDate)}</p>`:''}</div>`;
+    }).join('');
+    const count=questions.filter((_,j)=>{const row=rows[`${id}-${j+1}`];return row&&row.source!=='미확인'&&row.finding!=='미확인';}).length;
+    return `<details class="guardian-field-domain" ${i===0?'open':''}><summary>${esc(i+1)}. ${esc(name)} · ${count}/${questions.length}개 항목 확인 <small>자세히 보기</small></summary>${entries}</details>`;
+  }).join('');
+  return `<div class="panel" style="margin-top:15px"><h3>돌봄지음 29개 항목별 확인 현황</h3><p class="smallprint">방문 전에 확인 가능한 자료를 보여드립니다. 9번째 심리적 신뢰는 보호자 개인의 판단으로 기관 평가에 포함되지 않습니다.</p><p class="smallprint">${esc(payload?.notice||'')}</p>${hasData?`<p class="smallprint">점검 자료 기준일 ${esc(inspection.visitedDate)} · 공개일 ${esc(inspection.publishedDate)} · 재확인 권장일 ${esc(inspection.nextReviewDate)}</p>`:''}${groups}<p class="field-warning">미확인은 문제가 없다는 뜻도, 문제가 있다는 뜻도 아닙니다. 돌봄지음의 확인정보는 공적 인증이나 의료적 적합성 판단을 대체하지 않습니다.</p></div>`;
+}
 async function loadPublicAssessment(f){
   const el=$('detail-assessment');if(!el)return;
-  if(!['요양병원','요양원'].includes(f.type)){el.textContent='이 기관 유형은 아직 개별 점검 결과 공개대상이 아닙니다. 공통 점검기준을 먼저 확인해 주세요.';return;}
+  if(!['요양병원','요양원'].includes(f.type)){el.textContent='이 기관 유형은 아직 29개 세부 점검 공개대상이 아닙니다. 공통 기준을 먼저 확인해 주세요.';return;}
   try{
-    const r=await call('public_assessment',{facilityId:f.id},'GET');
+    const [r,detail]=await Promise.all([call('public_assessment',{facilityId:f.id},'GET'),call('public_field_inspection',{facilityId:f.id},'GET')]);
     if(!$('detail-dialog').open||!$('detail-assessment'))return;
-    if(!r.assessment||r.assessment.expired){el.innerHTML=`<p>${esc(r.notice||'확인된 결과가 없습니다.')}</p><p class="smallprint">미확인은 적합이나 부적합을 의미하지 않습니다.</p>`;return;}
-    const rows=r.assessment.rows||{};
-    const labels=ASSESSMENT_DOMAINS.map(([id,name])=>{
-      const row=rows[id]||{source:'미확인',finding:'미확인'};
-      return `<div class="assessment-row"><strong>${esc(name)}</strong><span>${esc(row.finding)}</span><small>확인 경로: ${esc(row.source)}</small></div>`;
-    }).join('');
-    el.innerHTML=`<p class="smallprint">관리자 확인일: ${esc(r.assessment.reviewedDate)} · 권장 재확인일: ${esc(r.assessment.nextAnnualDue)}</p>${labels}<p class="smallprint">기관 자체보고만 있는 항목은 독립 검증 완료로 표시하지 않습니다. 이 정보는 의료·돌봄 품질을 보증하는 인증이 아닙니다.</p>`;
-  }catch(e){el.textContent='기관별 심사자료를 조회할 수 없습니다: '+e.message;}
+    const summary=(!r.assessment||r.assessment.expired)?`<p>${esc(r.notice||'영역별 확인자료 없음')}</p>`:
+      `<p class="smallprint">8개 영역별 검토일 ${esc(r.assessment.reviewedDate)} · 권장 재확인일 ${esc(r.assessment.nextAnnualDue)}</p>${ASSESSMENT_DOMAINS.map(([id,name])=>{const row=r.assessment.rows?.[id]||{source:'미확인',finding:'미확인'};return `<div class="assessment-row"><strong>${esc(name)}</strong><span>${esc(row.finding)}</span><small>확인 경로: ${esc(row.source)}</small></div>`;}).join('')}`;
+    el.innerHTML=`<h4>영역별 자체심사 확인 현황</h4>${summary}${renderFieldPublicInspection(detail)}`;
+  }catch(e){el.textContent='기관별 점검자료를 조회할 수 없습니다: '+e.message;}
 }
 document.addEventListener('click',e=>{const go=e.target.closest('[data-close-detail]');if(go)$('detail-dialog').close();});
 
@@ -229,6 +244,49 @@ async function showQuota(){
 }
 $('quota-check').onclick=showQuota;
 
+// 기관 전용 결제 신청 창. 카드 승인 및 무통장 자동수납을 하지 않습니다.
+async function loadPaymentQuote(){
+  if(session.role!=='facility')return;
+  setMessage('pay-quote','기준 홍보료를 서버에서 확인하고 있습니다.');
+  try{
+    const q=await call('facility_order_quote',{months:Number(formValue('pay-months'))});
+    $('pay-quote').innerHTML=`<div class="pay-summary-head"><div><small>내 기관</small><strong>${esc(q.facilityName)}</strong><span>${esc(q.region)} ${esc(q.district)} · ${esc(q.facilityType)}</span></div><span class="pill">기관 로그인 전용</span></div><div class="pay-summary-row"><span>월 홍보료</span><b>${fmtWon(q.monthlyPrice)}</b></div><div class="pay-summary-row"><span>신청기간</span><b>${q.months}개월</b></div><div class="pay-summary-row total"><span>예상 홍보료 합계</span><strong>${fmtWon(q.estimatedAmount)}</strong></div><div class="pay-summary-foot">${esc(q.taxNote)}<div>해당 권역의 현재 참여 가능 정원: ${q.quota.remaining}곳 (실제 계약 시점 재확인)</div></div>`;
+    $('pay-request').disabled=q.quota.remaining===0;
+    setMessage('pay-feedback',q.quota.remaining===0?'해당 권역 홍보 정원이 모두 찼습니다. 기관 관리 담당자에게 문의하세요.':'카드 결제는 아직 이용할 수 없습니다. 신청 후 담당자가 입금 절차를 안내합니다.');
+  }catch(e){setMessage('pay-quote','홍보료 조회 오류: '+e.message);$('pay-request').disabled=true;}
+}
+async function loadMyPaymentOrders(){if(session.role!=='facility')return;
+  try{const data=await call('facility_my_orders');$('pay-orders').innerHTML=(data.items||[]).map(o=>`<div class="review"><strong>${esc(o.id)}</strong> · ${esc(o.status==='awaiting_manual_review'?'입금 안내·신청 검토 대기':o.status==='manually_verified'?'관리자 입금 확인':'신청 취소')}<div class="smallprint">${esc(o.requestDate)} · ${esc(o.months)}개월 · 예상 ${fmtWon(o.estimatedAmount)}</div><p>${esc(o.status==='manually_verified'?'입금 확인이 기록되었습니다. 게시 및 계약 활성화는 별도 절차입니다.':'신청만으로 결제가 완료되지 않습니다.')}</p></div>`).join('')||'<div class="empty">아직 홍보 신청 내역이 없습니다.</div>';}catch(e){setMessage('pay-orders','조회 실패: '+e.message);}
+}
+$('f-open-checkout').onclick=()=>{if(session.role!=='facility')return openAuth('facility');$('payment-dialog').showModal();loadPaymentQuote();loadMyPaymentOrders();};
+$('pay-close').onclick=()=>$('payment-dialog').close();
+$('pay-months').onchange=loadPaymentQuote;
+$('pay-refresh').onclick=()=>{loadPaymentQuote();loadMyPaymentOrders();};
+$('pay-request').onclick=async()=>{
+  if(session.role!=='facility')return alert('기관 계정으로 로그인해야 합니다.');
+  if(!$('pay-ack').checked)return alert('신청과 실제 결제 완료는 다르다는 안내를 확인하세요.');
+  if(!confirm('홍보상품 신청서를 접수할까요? 실제 결제나 광고 게시가 바로 진행되지 않습니다.'))return;
+  const btn=$('pay-request');btn.disabled=true;
+  try{const r=await call('facility_create_order',{months:Number(formValue('pay-months')),method:'manual_transfer',note:formValue('pay-note'),acknowledged:true});setMessage('pay-feedback',r.message+' 신청번호: '+r.order.id);await loadMyPaymentOrders();}
+  catch(e){setMessage('pay-feedback','신청 실패: '+e.message);}finally{btn.disabled=false;}
+};
+async function loadAdminPaymentOrders(){if(session.role!=='admin')return;
+  try{
+    const data=await call('admin_payment_orders');
+    $('a-pay-orders').innerHTML=(data.items||[]).map(o=>`<div class="review"><strong>${esc(o.facilityName)}</strong> · ${esc(o.status==='awaiting_manual_review'?'입금 검토 대기':o.status==='manually_verified'?'입금 수동 확인':'취소')}<div class="smallprint">신청번호 ${esc(o.id)} · ${esc(o.facilityType)} · ${esc(o.region)} ${esc(o.district)} · ${esc(o.requestDate)}</div><p>상품 ${o.months}개월 · 월 ${fmtWon(o.monthlyPrice)} · 예상 합계 <strong>${fmtWon(o.estimatedAmount)}</strong></p>${o.status==='awaiting_manual_review'?`<div class="flex"><button class="btn btn-primary btn-sm" data-pay-confirm="${esc(o.id)}">실제 입금 확인</button><button class="btn btn-outline btn-sm" data-pay-cancel="${esc(o.id)}">신청 취소</button></div>`:'<p class="smallprint">별도 계약 승인 필요</p>'}</div>`).join('')||'<div class="empty">접수된 홍보 신청이 없습니다.</div>';
+  }catch(e){setMessage('a-pay-orders','신청 목록 조회 실패: '+e.message);}
+}
+$('a-pay-refresh').onclick=loadAdminPaymentOrders;
+document.addEventListener('click',async e=>{
+  const yes=e.target.closest('[data-pay-confirm]'),no=e.target.closest('[data-pay-cancel]');if(!yes&&!no)return;
+  const orderId=(yes||no).dataset.payConfirm||(yes||no).dataset.payCancel;
+  const decision=yes?'manually_verified':'canceled';
+  let reference='';if(yes){reference=prompt('계좌 내역을 실제 확인한 뒤 수납 확인번호(5자 이상)를 입력하세요. 카드번호는 입력하지 마세요.');if(reference===null)return;if(reference.trim().length<5){alert('수납 확인번호가 너무 짧습니다.');return;}}
+  if(!confirm(yes?'실제 입금내역을 확인했습니까? 확인 후에도 광고는 자동 공개되지 않습니다.':'신청을 취소하시겠습니까?'))return;
+  try{const r=await call('admin_review_payment_order',{orderId,decision,reference,confirmedActualReceipt:!!yes});setMessage('a-pay-feedback',r.notice);await loadAdminPaymentOrders();}
+  catch(err){setMessage('a-pay-feedback','처리 실패: '+err.message);}
+});
+
 // Facility member portal.
 async function loadMine(){if(session.role!=='facility')return;
   try{
@@ -237,7 +295,7 @@ async function loadMine(){if(session.role!=='facility')return;
     const mapping={'f-name':'name','f-type':'type','f-region':'region','f-phone':'phone','f-address':'address','f-desc':'description','f-homepage':'homepage'};
     for(const [id,key] of Object.entries(mapping))if($(id)&&f[key])$(id).value=f[key];
     optionDistrict('f-region','f-district',f.district);
-    await refreshRequests();await loadSelfAssessmentState();
+    await refreshRequests();await loadSelfAssessmentState();await loadPaymentQuote();await loadMyPaymentOrders();
   }catch(e){setMessage('f-feedback','기관정보 연결 오류: '+e.message);}
 }
 async function uploadImage(file,facilityId){
@@ -284,7 +342,7 @@ $('a-refresh').onclick=()=>loadAdmin(true);$('a-more').onclick=()=>{if(nextAdmin
 function selectFacility(id){const f=adminFacilities.find(x=>x.id===id);if(!f)return;selectedId=id;setMessage('a-selected',f.id);const mapping={'a-name':'name','a-type':'type','a-region':'region','a-phone':'phone','a-address':'address','a-desc':'description','a-homepage':'homepage','a-image':'imageUrl','a-official':'officialId','a-source':'source'};for(const [field,key] of Object.entries(mapping))$(field).value=f[key]||'';
   optionDistrict('a-region','a-district',f.district);
   $('a-start').value=f.contractStart||'';$('a-end').value=f.contractEnd||'';$('a-reference').value='';$('a-paid').checked=false;
-  setMessage('a-save-message',`선택: ${f.name} | 게시 ${f.publicationStatus} | 광고 ${f.advertisingStatus} | 입금 ${f.paymentStatus}`);renderAdmin();}
+  setMessage('a-save-message',`선택: ${f.name} | 게시 ${f.publicationStatus} | 광고 ${f.advertisingStatus} | 입금 ${f.paymentStatus}`);renderAdmin();loadFieldAdmin();}
 document.addEventListener('click',e=>{const btn=e.target.closest('[data-select-fac]');if(btn)selectFacility(btn.dataset.selectFac);});
 $('a-new').onclick=()=>{selectedId='';setMessage('a-selected','신규 기관');for(const id of ['a-name','a-phone','a-address','a-desc','a-homepage','a-image','a-official'])$(id).value='';$('a-source').value='직접 확인';setMessage('a-save-message','신규 기관은 비공개 후보로 등록됩니다.');renderAdmin();};
 $('a-save').onclick=async()=>{const btn=$('a-save');btn.disabled=true;try{const r=await call('admin_save_facility',{facilityId:selectedId,facility:facilityForm('a-')});setMessage('a-save-message',`기관 저장 완료: ${r.facility.id} (공개 여부는 계약·승인 조건으로 결정)`);await loadAdmin();selectFacility(r.facility.id);}catch(e){setMessage('a-save-message','저장 실패: '+e.message);}finally{btn.disabled=false;}};
@@ -361,6 +419,62 @@ document.addEventListener('click',async e=>{
  try{await call('admin_review_assessment',{reportId:container.dataset.assessId,decision,results,internalReason});await loadAssessments();if(decision==='hold'){await loadAdmin();await loadPublic();}}
  catch(err){alert('점검 검토 실패: '+err.message);}finally{btn.disabled=false;}
 });
+
+
+// [v2.6] 관리자가 직접 방문해 확인한 29개 세부 자료: 초안과 공개본 분리.
+function fieldSelectOptions(values,current){return values.map(v=>`<option value="${esc(v)}" ${v===current?'selected':''}>${esc(v)}</option>`).join('');}
+const FIELD_IDS_UI=ASSESSMENT_DOMAINS.flatMap(([id],_)=>PUBLIC_CHECKLIST[id].map((_,j)=>`${id}-${j+1}`));
+let fieldDraftVersion=null;
+function renderFieldEditor(rows={}){
+  $('a-field-questions').innerHTML=ASSESSMENT_DOMAINS.map(([group,name],i)=>{
+    const items=(PUBLIC_CHECKLIST[group]||[]).map(([q,hint],j)=>{
+      const id=`${group}-${j+1}`,row=rows[id]||{};
+      return `<article class="field-item" data-field-id="${esc(id)}"><b>${j+1}. ${esc(q)}</b><p>${esc(hint)}</p><div class="field-cols"><label>확인 방법<select data-field-source>${fieldSelectOptions(['미확인','현장','서류','기관보고'],row.source||'미확인')}</select></label><label>판단 상태<select data-field-finding>${fieldSelectOptions(['미확인','확인','보완중','우려'],row.finding||'미확인')}</select></label></div><label>관리자 내부 점검 근거 · 비공개<textarea data-field-internal maxlength="400" rows="2" placeholder="관찰한 사실과 자료 종류를 구체적으로 기록. 개인정보 금지">${esc(row.internalNote||'')}</textarea></label><label>보호자가 읽을 공개 설명 · 승인 시에만 노출<textarea data-field-public maxlength="180" rows="2" placeholder="예: 현장점검 당시 공용공간을 관찰했습니다. 관찰하지 않은 내용은 적지 마세요.">${esc(row.publicSummary||'')}</textarea></label></article>`;
+    }).join('');
+    return `<details class="field-domain" ${i===0?'open':''}><summary>${i+1}. ${esc(name)} <small>${PUBLIC_CHECKLIST[group].length}개 항목 · 직접 확인한 내용만 기록</small></summary><div class="field-items">${items}</div></details>`;
+  }).join('');
+}
+function getFieldForm(){
+  const rows={};
+  document.querySelectorAll('[data-field-id]').forEach(el=>{
+    rows[el.dataset.fieldId]={source:el.querySelector('[data-field-source]').value,finding:el.querySelector('[data-field-finding]').value,internalNote:el.querySelector('[data-field-internal]').value,publicSummary:el.querySelector('[data-field-public]').value};
+  });
+  return {facilityId:selectedId,visitedDate:formValue('a-field-date'),internalGeneral:formValue('a-field-internal'),rows};
+}
+async function loadFieldAdmin(){
+  if(session.role!=='admin')return;
+  const f=adminFacilities.find(x=>x.id===selectedId);
+  if(!f){$('a-field-name').value='';$('a-field-questions').innerHTML='';setMessage('a-field-status','기관을 먼저 선택하세요.');return;}
+  $('a-field-name').value=`${f.name} (${f.type})`;
+  if(!['요양병원','요양원'].includes(f.type)){$('a-field-questions').innerHTML='';setMessage('a-field-status','이 유형은 아직 29개 세부점검을 지원하지 않습니다. 요양병원 또는 요양원을 선택하세요.');return;}
+  const targetId=selectedId;
+  setMessage('a-field-status','관리자 전용 현장점검 초안을 불러오는 중입니다.');
+  try{
+    const result=await call('admin_field_state',{facilityId:targetId},'GET');
+    if(targetId!==selectedId)return;
+    const draft=result.draft||{};
+    $('a-field-date').value=draft.visitedDate||new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Seoul'});
+    $('a-field-internal').value=draft.internalGeneral||'';
+    renderFieldEditor(draft.rows||{});
+    setMessage('a-field-status',`선택: ${f.name} · 초안 ${draft.editStatus||'없음'} · 기존 공개 ${result.published?.publishedDate||'없음'} · 안전 게시보류 ${result.riskHold?'적용':'없음'}`);
+  }catch(e){setMessage('a-field-status','세부점검 초안 조회 실패: '+e.message);}
+}
+$('a-field-refresh').onclick=loadFieldAdmin;
+$('a-field-save').onclick=async()=>{
+  if(!selectedId){alert('기관을 먼저 선택하세요.');return;}
+  const payload=getFieldForm();
+  if(payload.rows&&Object.values(payload.rows).some(r=>r.finding==='우려')&&!confirm('중대한 우려로 기록한 항목이 있습니다. 저장 즉시 해당 기관의 광고 게시가 보류될 수 있습니다. 계속하시겠습니까?'))return;
+  const btn=$('a-field-save');btn.disabled=true;
+  try{const r=await call('admin_field_save',payload);setMessage('a-field-status',`초안 저장 완료. 확인 항목 ${r.verified}개${r.publicationPaused?' · 안전 관련 우려로 기관 게시 보류됨':''}`);}
+  catch(e){setMessage('a-field-status','임시저장 실패: '+e.message);}finally{btn.disabled=false;}
+};
+$('a-field-publish').onclick=async()=>{
+  if(!selectedId){alert('기관을 먼저 선택하세요.');return;}
+  if(!confirm('저장된 현장점검 초안을 보호자에게 공개할까요? 내부 메모는 공개하지 않지만 승인된 공개용 설명은 보호자에게 표시됩니다.'))return;
+  const btn=$('a-field-publish');btn.disabled=true;
+  try{const r=await call('admin_field_publish',{facilityId:selectedId});setMessage('a-field-status',`보호자 공개 완료 · 공개일 ${r.date}`);}
+  catch(e){setMessage('a-field-status','공개 승인 실패: '+e.message+' (필요한 경우 먼저 임시저장하세요)');}finally{btn.disabled=false;}
+};
 
 // Only public approved paid institutions are requested at start.
 loadPublic();
