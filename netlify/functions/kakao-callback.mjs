@@ -1,5 +1,6 @@
 import { timingSafeEqual } from 'node:crypto';
 import { services, response } from './_shared/core.mjs';
+import {resolveKakaoRedirect} from './_shared/kakao-origin.mjs';
 const clear='__Host-ci-oauth=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Lax';
 function safeEqual(a,b){if(!a||!b||a.length!==b.length)return false;return timingSafeEqual(Buffer.from(a),Buffer.from(b));}
 function popupHTML(token,redirectMode,origin){
@@ -23,9 +24,10 @@ export async function handler(event){
   if(event.queryStringParameters?.error)return fail('카카오에서 로그인이 취소되거나 승인되지 않았습니다.');
   const code=event.queryStringParameters?.code;
   if(!code||code.length>1024)return fail('카카오 로그인 인가코드를 받지 못했습니다.');
-  const key=process.env.KAKAO_REST_API_KEY,redirect=process.env.KAKAO_REDIRECT_URI;
-  if(!key||!redirect)return fail('서버의 카카오 로그인 설정이 필요합니다.');
+  const key=process.env.KAKAO_REST_API_KEY,configured=process.env.KAKAO_REDIRECT_URI;
+  if(!key||!configured)return fail('서버의 카카오 로그인 설정이 필요합니다.');
   try{
+    const redirect=resolveKakaoRedirect(event.headers?.host||event.headers?.Host,configured);
     const form=new URLSearchParams({grant_type:'authorization_code',client_id:key,redirect_uri:redirect,code});
     if(process.env.KAKAO_CLIENT_SECRET)form.set('client_secret',process.env.KAKAO_CLIENT_SECRET);
     const tokenRes=await fetch('https://kauth.kakao.com/oauth/token',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:form,signal:AbortSignal.timeout(10000)});

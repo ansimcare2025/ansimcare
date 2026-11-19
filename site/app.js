@@ -29,6 +29,57 @@ async function call(action,values={},method='POST'){
   if(!res.ok||reply.ok!==true)throw Error(reply.error||`서버 오류 ${res.status}`);
   return reply;
 }
+// 익명 이용 집계: 브라우저 세션의 임의 UUID만 서버로 보내고 IP·이름·건강정보는 보내지 않습니다.
+// 본 지표는 일별 브라우저 세션 기준이며 실제 개인 수를 뜻하지 않습니다.
+const TRACK_SESSION_KEY='dj_anon_session_v28';
+let ephemeralSession='';
+function getAnonymousSession(){
+  try{
+    const old=sessionStorage.getItem(TRACK_SESSION_KEY);
+    if(old&&/^[0-9a-f-]{36}$/i.test(old))return old;
+    const fresh=crypto.randomUUID();sessionStorage.setItem(TRACK_SESSION_KEY,fresh);return fresh;
+  }catch{
+    if(!ephemeralSession)ephemeralSession=crypto.randomUUID();return ephemeralSession;
+  }
+}
+function recordVisit(metric,facilityId=''){
+  // 시험 브랜치에서는 운영자료를 변경하지 않습니다.
+  if(location.hostname.includes('--'))return;
+  const data={action:'public_track',metric,sessionId:getAnonymousSession(),...(facilityId?{facilityId}:{})};
+  const endpoint='/.netlify/functions/api';
+  try{
+    const body=JSON.stringify(data);
+    if(navigator.sendBeacon){navigator.sendBeacon(endpoint,new Blob([body],{type:'application/json'}));}
+    else fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json'},body,keepalive:true,credentials:'omit'}).catch(()=>{});
+  }catch{} // 통계 오류가 기관 검색·전화 사용을 막지 않도록 합니다.
+}
+const fmtAnalytics=n=>Number(n||0).toLocaleString('ko-KR');
+function renderAnalyticsReport(payload,prefix){
+  const out=$(prefix+'-analytics-summary'),chart=$(prefix+'-analytics-chart'),foot=$(prefix+'-analytics-footnote');
+  if(!out)return;
+  const d=payload.summary||{};
+  const kpis=[['돌봄지음 전체 방문','siteSessions','사이트 방문 세션'],['우리 기관 상세 조회','detailSessions','기관 상세정보 열람 세션'],['우리 기관 전화 클릭','phoneSessions','전화 연결 선택 세션']];
+  const adminNoFacility=prefix==='a'&&!payload.facilityId;
+  out.innerHTML=kpis.filter((_,i)=>!adminNoFacility||i===0).map(([title,key,desc])=>`<div class="analytics-kpi"><small>${esc(title)}</small><strong>${fmtAnalytics(d[key])}</strong><span>${esc(desc)}</span></div>`).join('');
+  if(chart){
+    const recent=(payload.days||[]).slice(-14),max=Math.max(1,...recent.map(r=>r.detailSessions||0));
+    chart.innerHTML=recent.length&&payload.facilityId?`<h4>우리 기관 · 최근 14일 상세 조회</h4><div class="analytics-bars">${recent.map(r=>`<div class="analytics-bar-day" title="${esc(r.day)}: ${fmtAnalytics(r.detailSessions)}세션"><span class="analytics-bar" style="height:${Math.max(2,Math.round((r.detailSessions||0)/max*115))}px"></span><small>${esc(r.day.slice(5))}</small></div>`).join('')}</div><div class="analytics-legend">막대는 일별 기관 상세 조회 세션 수이며, 상담·입소 전환 실적이 아닙니다.</div>`:'';
+  }
+  if(foot)foot.textContent=`집계기간: ${payload.periodStart} ~ ${payload.periodEnd} · 하루에 한 번 집계한 익명 브라우저 세션 수입니다. 실제 사람 수와는 차이가 있습니다.${payload.testMode?' 시험 주소는 새 방문을 기록하지 않습니다.':''}`;
+}
+async function loadFacilityAnalytics(){if(session.role!=='facility')return;
+  setMessage('f-analytics-summary','홍보 성과를 조회하는 중입니다.');
+  try{const r=await call('facility_my_analytics');renderAnalyticsReport(r,'f');}
+  catch(e){setMessage('f-analytics-summary','성과 조회 실패: '+e.message);}
+}
+async function loadAdminAnalytics(){if(session.role!=='admin')return;
+  setMessage('a-analytics-summary','방문 현황을 조회하는 중입니다.');
+  try{const r=await call('admin_analytics',{facilityId:selectedId||''});renderAnalyticsReport(r,'a');if(!selectedId)setMessage('a-analytics-footnote','전체 사이트 최근 30일 · 기관별 조회·전화 클릭은 아래에서 기관을 선택하면 표시합니다.');}
+  catch(e){setMessage('a-analytics-summary','통계 조회 실패: '+e.message);}
+}
+$('f-analytics-refresh').onclick=loadFacilityAnalytics;
+$('a-analytics-refresh').onclick=loadAdminAnalytics;
+
 function optionDistrict(regionId,districtId,prefer='전체'){
   const select=$(districtId),items=REGION[formValue(regionId)]||[];
   select.replaceChildren(new Option('전체 시·군·구','전체'));
@@ -75,8 +126,9 @@ function navigate(page,{fromHistory=false}={}){
   document.querySelectorAll('[data-page]').forEach(p=>p.classList.toggle('active',p.dataset.page===page));
   setMessage('top-title',TITLES[page]);window.scrollTo({top:0,behavior:'instant'});
   if(page==='match')loadPublic();
+recordVisit('site_visit');
   if(page==='facility')loadMine();
-  if(page==='admin'){loadAdmin();loadAssessments();loadAdminPaymentOrders();}
+  if(page==='admin'){loadAdmin();loadAdminOverview();loadAssessments();loadAdminPaymentOrders();loadAdminAnalytics();}
   if(page==='plans')loadPrivatePlans();
 }
 // 브라우저/휴대폰의 자체 뒤로가기와 화면 내 화살표가 같은 기록을 사용합니다.
@@ -123,7 +175,7 @@ $('kakao-login').onclick=()=>{
   setMessage('auth-feedback','카카오 인증 창에서 로그인을 완료해 주세요.');
 };
 async function updateSession(user){
-  if(!user){session={user:null,role:'guest',uid:'',facilityId:''};}
+  if(!user){session={user:null,role:'guest',uid:'',facilityId:''};adminFacilities=[];selectedId='';nextAdminCursor=null;setMessage('a-full-detail','관리자 로그인 후 조회할 수 있습니다.');setMessage('a-facilities','관리자 로그인 후 조회할 수 있습니다.');}
   else{
     const claims=(await user.getIdTokenResult(true)).claims;
     session={user,uid:user.uid,role:claims.role==='admin'?'admin':claims.role==='facility'?'facility':'guardian',facilityId:claims.facilityId||''};
@@ -163,10 +215,11 @@ $('search-reset').onclick=()=>{for(const id of ['match-region','match-type'])$(i
 $('match-keyword').addEventListener('keydown',e=>{if(e.key==='Enter')loadPublic();});
 function showPublicDetail(id){
   const f=publicFacilities.find(x=>x.id===id);if(!f)return;
-  $('detail-content').innerHTML=`<div class="kicker">PAID PARTICIPATING PROVIDER</div><h2>${esc(f.name)}</h2><div class="adflag">유료 홍보 참여기관 · 공적 인증 아님</div>${f.imageUrl&&/^https:\/\//.test(f.imageUrl)?`<img class="detail-img" src="${esc(f.imageUrl)}" alt="${esc(f.name)} 제공 사진">`:''}<dl><dt>유형·지역</dt><dd>${esc(f.type)} · ${esc(f.region)} ${esc(f.district)}</dd><dt>주소</dt><dd>${esc(f.address||'기관에 문의')}</dd><dt>대표전화</dt><dd>${esc(f.phone||'기관에 문의')}</dd><dt>기관 소개</dt><dd>${esc(f.description||'정보 업데이트 예정')}</dd><dt>정보 확인일</dt><dd>${esc(f.lastConfirmedAt||'직접 확인 필요')}</dd>${f.homepage&&/^https:\/\//.test(f.homepage)?`<dt>홈페이지</dt><dd><a target="_blank" rel="noopener noreferrer" href="${esc(f.homepage)}">기관 홈페이지 열기</a></dd>`:''}</dl><h3>방문 전 확인 질문</h3><ul class="list"><li>오늘 현재 입소·입원이 가능한가요?</li><li>보험 적용 후 예상 월 비용과 추가 비용은?</li><li>야간 인력·응급상황·보호자 연락 방식은?</li><li>면회·송영·인지 활동은 어떻게 운영되나요?</li></ul><p class="smallprint">위 소개·사진은 기관이 제공하거나 관리자 확인을 거친 홍보 정보이며, 의료적 적합성 또는 공적 평가 결과를 의미하지 않습니다.</p>`;
+  $('detail-content').innerHTML=`<div class="kicker">PAID PARTICIPATING PROVIDER</div><h2>${esc(f.name)}</h2><div class="adflag">유료 홍보 참여기관 · 공적 인증 아님</div>${f.imageUrl&&/^https:\/\//.test(f.imageUrl)?`<img class="detail-img" src="${esc(f.imageUrl)}" alt="${esc(f.name)} 제공 사진">`:''}<dl><dt>유형·지역</dt><dd>${esc(f.type)} · ${esc(f.region)} ${esc(f.district)}</dd><dt>주소</dt><dd>${esc(f.address||'기관에 문의')}</dd><dt>대표전화</dt><dd>${esc(f.phone||'기관에 문의')}${f.phone&&f.phone.replace(/[^+0-9]/g,'').length>=8?` <a class="btn btn-primary btn-sm" href="tel:${esc(f.phone.replace(/[^+0-9]/g,''))}" data-track-call="${esc(f.id)}">전화 연결</a>`:''}</dd><dt>기관 소개</dt><dd>${esc(f.description||'정보 업데이트 예정')}</dd><dt>정보 확인일</dt><dd>${esc(f.lastConfirmedAt||'직접 확인 필요')}</dd>${f.homepage&&/^https:\/\//.test(f.homepage)?`<dt>홈페이지</dt><dd><a target="_blank" rel="noopener noreferrer" href="${esc(f.homepage)}">기관 홈페이지 열기</a></dd>`:''}</dl><h3>방문 전 확인 질문</h3><ul class="list"><li>오늘 현재 입소·입원이 가능한가요?</li><li>보험 적용 후 예상 월 비용과 추가 비용은?</li><li>야간 인력·응급상황·보호자 연락 방식은?</li><li>면회·송영·인지 활동은 어떻게 운영되나요?</li></ul><p class="smallprint">위 소개·사진은 기관이 제공하거나 관리자 확인을 거친 홍보 정보이며, 의료적 적합성 또는 공적 평가 결과를 의미하지 않습니다.</p>`;
   // 보호자는 점검기준을 언제든지 보고, 관리자 검토 완료된 정보만 추가로 받습니다.
   $('detail-content').insertAdjacentHTML('beforeend','<div class="panel" style="margin-top:18px"><h3>돌봄지음 돌봄약속 · 기관별 확인 현황</h3><p>어떤 기준으로 기관을 살펴보는지 <button class="btn btn-outline btn-sm" data-go="standards" data-close-detail="true">9개 점검기준 보기</button></p><div id="detail-assessment">공개 가능한 점검 결과를 확인하는 중입니다.</div></div>');
   $('detail-dialog').showModal();
+  recordVisit('facility_detail',f.id);
   loadPublicAssessment(f);
 }
 
@@ -205,6 +258,7 @@ async function loadPublicAssessment(f){
 }
 document.addEventListener('click',e=>{const go=e.target.closest('[data-close-detail]');if(go)$('detail-dialog').close();});
 
+document.addEventListener('click',e=>{const b=e.target.closest('[data-track-call]');if(b)recordVisit('phone_click',b.dataset.trackCall);});
 $('detail-close').onclick=()=>$('detail-dialog').close();
 document.addEventListener('click',e=>{const b=e.target.closest('[data-public-detail]');if(b)showPublicDetail(b.dataset.publicDetail);});
 $('elder-search').onclick=()=>{for(const [a,b] of [['elder-region','match-region'],['elder-type','match-type']])$(b).value=$(a).value;optionDistrict('match-region','match-district',formValue('elder-district'));navigate('match');};
@@ -295,7 +349,7 @@ async function loadMine(){if(session.role!=='facility')return;
     const mapping={'f-name':'name','f-type':'type','f-region':'region','f-phone':'phone','f-address':'address','f-desc':'description','f-homepage':'homepage'};
     for(const [id,key] of Object.entries(mapping))if($(id)&&f[key])$(id).value=f[key];
     optionDistrict('f-region','f-district',f.district);
-    await refreshRequests();await loadSelfAssessmentState();await loadPaymentQuote();await loadMyPaymentOrders();
+    await refreshRequests();await loadSelfAssessmentState();await loadPaymentQuote();await loadMyPaymentOrders();await loadFacilityAnalytics();
   }catch(e){setMessage('f-feedback','기관정보 연결 오류: '+e.message);}
 }
 async function uploadImage(file,facilityId){
@@ -327,30 +381,58 @@ $('self-check-send').onclick=async()=>{
 };
 
 // Administrative portal. The backend checks the admin custom claim on EVERY request.
+let adminSearchState={keyword:'',region:'',district:'',type:''},adminSearchRequestId=0;
+async function loadAdminOverview(){if(session.role!=='admin')return;
+  try{const r=await call('admin_overview');setMessage('a-total',r.total.toLocaleString('ko-KR'));setMessage('a-active',r.active.toLocaleString('ko-KR'));setMessage('a-pending',r.pending.toLocaleString('ko-KR'));}
+  catch(e){setMessage('a-total','조회 오류');setMessage('a-search-notice','전체 집계 조회 실패: '+e.message);}
+}
 async function loadAdmin(reset=true){if(session.role!=='admin')return;
   if(reset){nextAdminCursor=null;adminFacilities=[];}
-  try{const r=await call('admin_list',{after:nextAdminCursor||'',pageSize:150});adminFacilities.push(...(r.items||[]));nextAdminCursor=r.next;renderAdmin();await refreshRequests();}catch(e){setMessage('a-facilities','목록 로드 실패: '+e.message);}}
+  const requestId=++adminSearchRequestId;
+  setMessage('a-search-notice','전체 등록기관에서 검색하는 중입니다.');
+  try{
+    const r=await call('admin_list',{...adminSearchState,after:nextAdminCursor||'',pageSize:100});
+    if(requestId!==adminSearchRequestId)return;
+    const prior=new Set(adminFacilities.map(f=>f.id));
+    adminFacilities.push(...(r.items||[]).filter(f=>!prior.has(f.id)));
+    nextAdminCursor=r.next||'';
+    setMessage('a-search-notice',`현재 ${adminFacilities.length.toLocaleString('ko-KR')}곳 표시 · ${nextAdminCursor?'결과가 더 있습니다. [다음 결과]를 누르세요.':'현재 조건의 마지막 결과입니다.'}${r.partial?' 일부 자료는 계속 검색해야 합니다.':''} · 보호자에게 비공개인 기관도 포함`);
+    renderAdmin();
+    if(reset)await refreshRequests();
+  }catch(e){if(requestId===adminSearchRequestId)setMessage('a-search-notice','기관 검색 실패: '+e.message);}
+}
 function renderAdmin(){
-  setMessage('a-total',adminFacilities.length+(nextAdminCursor?' +':''));
-  setMessage('a-active',adminFacilities.filter(f=>f.advertisingStatus==='active').length+(nextAdminCursor?' +':''));
-  setMessage('a-pending',adminFacilities.filter(f=>f.publicationStatus!=='approved').length+(nextAdminCursor?' +':''));
-  const k=formValue('a-filter').toLowerCase();const rows=adminFacilities.filter(f=>[f.id,f.name,f.region,f.district].join(' ').toLowerCase().includes(k));
-  $('a-facilities').innerHTML=rows.map(f=>`<div class="admin-entry ${selectedId===f.id?'selected':''}"><div><strong>${esc(f.name)}</strong><small>${esc(f.id)} · ${esc(f.region)} ${esc(f.district)} · ${esc(f.type)} · ${esc(f.advertisingStatus)}</small></div><button class="btn btn-outline btn-sm" data-select-fac="${esc(f.id)}">선택</button></div>`).join('')||'<div class="empty">이 조건에 표시할 기관이 없습니다.</div>';
+  $('a-facilities').innerHTML=adminFacilities.map(f=>`<div class="admin-entry ${selectedId===f.id?'selected':''}"><div><strong>${esc(f.name)}</strong><small>${esc(f.id)} · ${esc(f.region)} ${esc(f.district)} · ${esc(f.type)} · 게시 ${esc(f.publicationStatus)} · 광고 ${esc(f.advertisingStatus)}</small></div><button class="btn btn-outline btn-sm" data-select-fac="${esc(f.id)}">선택</button></div>`).join('')||'<div class="empty">현재 조건에 표시할 기관이 없습니다. 다른 지역이나 검색어로 다시 찾아보세요.</div>';
   $('a-more').hidden=!nextAdminCursor;
 }
-$('a-refresh').onclick=()=>loadAdmin(true);$('a-more').onclick=()=>{if(nextAdminCursor)loadAdmin(false);};$('a-filter').oninput=renderAdmin;
+function setAdminDistricts(){const reg=formValue('a-filter-region'),ds=$('a-filter-district');ds.replaceChildren(new Option('전체 시·군·구',''));for(const d of REGION[reg]||[])ds.add(new Option(d,d));}
+$('a-filter-region').onchange=setAdminDistricts;
+function runAdminSearch(){adminSearchState={keyword:formValue('a-filter'),region:formValue('a-filter-region'),district:formValue('a-filter-district'),type:formValue('a-filter-type')};loadAdmin(true);}
+$('a-refresh').onclick=()=>{runAdminSearch();loadAdminOverview();};
+$('a-search').onclick=runAdminSearch;
+$('a-filter').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();runAdminSearch();}};
+$('a-search-reset').onclick=()=>{$('a-filter').value='';$('a-filter-region').value='';setAdminDistricts();$('a-filter-type').value='';runAdminSearch();};
+$('a-more').onclick=()=>{if(nextAdminCursor)loadAdmin(false);};
+function renderAdminDetails(f){const fields=[
+  ['기관명',f.name],['내부 기관 ID',f.id],['기관 유형',f.type],['지역',`${f.region||''} ${f.district||''}`],['주소',f.address],['전화번호',f.phone],['공식 기관코드',f.officialId],['원본 출처',f.source],['원본 기준일',f.sourceDate],['정보 최근 확인일',f.lastConfirmedAt],['홈페이지',f.homepage],['기관 소개',f.description],['게시 승인',f.publicationStatus],['홍보 상태',f.advertisingStatus],['수납 상태',f.paymentStatus],['계약 시작일',f.contractStart],['계약 종료일',f.contractEnd],['내부 수납 확인번호',f.paymentReference],['수납 확인자 UID',f.paidConfirmedBy],['수납 확인시각',f.paidConfirmedAt],['담당자 UID',(f.managerUids||[]).join(', ')],['최초 등록일',f.createdAt],['최근 수정일',f.updatedAt]
+ ];
+  $('a-full-detail').innerHTML=fields.map(([title,value])=>`<div class="admin-detail-pair"><small>${esc(title)}</small><strong>${esc(value||'미확인 / 미입력')}</strong></div>`).join('');
+}
 function selectFacility(id){const f=adminFacilities.find(x=>x.id===id);if(!f)return;selectedId=id;setMessage('a-selected',f.id);const mapping={'a-name':'name','a-type':'type','a-region':'region','a-phone':'phone','a-address':'address','a-desc':'description','a-homepage':'homepage','a-image':'imageUrl','a-official':'officialId','a-source':'source'};for(const [field,key] of Object.entries(mapping))$(field).value=f[key]||'';
   optionDistrict('a-region','a-district',f.district);
   $('a-start').value=f.contractStart||'';$('a-end').value=f.contractEnd||'';$('a-reference').value='';$('a-paid').checked=false;
-  setMessage('a-save-message',`선택: ${f.name} | 게시 ${f.publicationStatus} | 광고 ${f.advertisingStatus} | 입금 ${f.paymentStatus}`);renderAdmin();loadFieldAdmin();}
+  setMessage('a-save-message',`선택: ${f.name} | 게시 ${f.publicationStatus} | 광고 ${f.advertisingStatus} | 입금 ${f.paymentStatus}`);renderAdmin();renderAdminDetails(f);loadFieldAdmin();loadAdminAnalytics();
+  // 목록 캐시와 별개로 최신 기관 정보를 관리자 권한으로 다시 조회합니다.
+  call('admin_facility_detail',{facilityId:id}).then(r=>{if(selectedId===id&&r.facility)renderAdminDetails(r.facility);}).catch(e=>{if(selectedId===id)setMessage('a-detail-privacy','상세 재조회 오류: '+e.message);});
+}
 document.addEventListener('click',e=>{const btn=e.target.closest('[data-select-fac]');if(btn)selectFacility(btn.dataset.selectFac);});
-$('a-new').onclick=()=>{selectedId='';setMessage('a-selected','신규 기관');for(const id of ['a-name','a-phone','a-address','a-desc','a-homepage','a-image','a-official'])$(id).value='';$('a-source').value='직접 확인';setMessage('a-save-message','신규 기관은 비공개 후보로 등록됩니다.');renderAdmin();};
-$('a-save').onclick=async()=>{const btn=$('a-save');btn.disabled=true;try{const r=await call('admin_save_facility',{facilityId:selectedId,facility:facilityForm('a-')});setMessage('a-save-message',`기관 저장 완료: ${r.facility.id} (공개 여부는 계약·승인 조건으로 결정)`);await loadAdmin();selectFacility(r.facility.id);}catch(e){setMessage('a-save-message','저장 실패: '+e.message);}finally{btn.disabled=false;}};
-document.addEventListener('click',async e=>{const b=e.target.closest('[data-approve]');if(!b)return;if(!selectedId){alert('먼저 기관을 선택하세요.');return;}const st=b.dataset.approve;if(!confirm(st==='approved'?'기관정보의 사실·공개권한을 확인했고 게시 승인하시겠습니까?':'기관 게시 상태를 변경할까요?'))return;try{await call('admin_approve',{facilityId:selectedId,status:st});await loadAdmin();selectFacility(selectedId);await loadPublic();}catch(err){alert('승인상태 변경 실패: '+err.message);}});
+$('a-new').onclick=()=>{selectedId='';setMessage('a-selected','신규 기관');setMessage('a-full-detail','신규 등록 화면입니다. 기관 저장 후 상세정보를 확인할 수 있습니다.');for(const id of ['a-name','a-phone','a-address','a-desc','a-homepage','a-image','a-official'])$(id).value='';$('a-source').value='직접 확인';setMessage('a-save-message','신규 기관은 비공개 후보로 등록됩니다.');renderAdmin();};
+$('a-save').onclick=async()=>{const btn=$('a-save');btn.disabled=true;try{const r=await call('admin_save_facility',{facilityId:selectedId,facility:facilityForm('a-')});setMessage('a-save-message',`기관 저장 완료: ${r.facility.id} (공개 여부는 계약·승인 조건으로 결정)`);await loadAdmin();if(!adminFacilities.find(f=>f.id===r.facility.id)){adminFacilities.unshift(r.facility);renderAdmin();}selectFacility(r.facility.id);await loadAdminOverview();}catch(e){setMessage('a-save-message','저장 실패: '+e.message);}finally{btn.disabled=false;}};
+document.addEventListener('click',async e=>{const b=e.target.closest('[data-approve]');if(!b)return;if(!selectedId){alert('먼저 기관을 선택하세요.');return;}const st=b.dataset.approve;if(!confirm(st==='approved'?'기관정보의 사실·공개권한을 확인했고 게시 승인하시겠습니까?':'기관 게시 상태를 변경할까요?'))return;try{await call('admin_approve',{facilityId:selectedId,status:st});await loadAdmin();if(!adminFacilities.find(f=>f.id===selectedId)){const d=await call('admin_facility_detail',{facilityId:selectedId});adminFacilities.unshift(d.facility);}selectFacility(selectedId);await loadAdminOverview();await loadPublic();}catch(err){alert('승인상태 변경 실패: '+err.message);}});
 $('a-link').onclick=async()=>{if(!selectedId)return alert('먼저 기관을 선택하세요.');const uid=formValue('a-uid');if(!uid)return alert('담당자 UID를 입력하세요.');if(!confirm('UID를 확인하고 선택된 기관의 관리 권한을 부여하시겠습니까?'))return;try{await call('admin_link_uid',{facilityId:selectedId,uid});alert('기관 담당자 연결 성공. 담당자가 로그아웃 후 다시 로그인하면 새 권한이 적용됩니다.');}catch(e){alert('권한 연결 실패: '+e.message);}};
 $('a-issue-email').onclick=async()=>{if(!selectedId)return alert('기관을 선택하세요.');if(!confirm('담당자 이메일 계정과 임시 비밀번호를 발급하시겠습니까?'))return;try{const r=await call('admin_issue_email',{facilityId:selectedId,email:formValue('a-email')});setMessage('a-credential-output',`기관 ID: ${r.facilityId||selectedId}\n담당자 UID: ${r.uid}\n이메일: ${r.email}\n임시 비밀번호: ${r.temporaryPassword}\n\n비밀번호는 다시 조회할 수 없습니다. 안전하게 전달하세요.`);}catch(e){alert('계정 발급 실패: '+e.message);}};
 async function changeContract(command){if(!selectedId)return alert('먼저 기관을 선택하세요.');if(command==='activate'&&!$('a-paid').checked)return alert('수납을 확인했다면 체크박스에 동의 표시하세요.');if(!confirm(command==='activate'?'실제 입금·계약 서류를 확인했고 유료 홍보를 시작하시겠습니까?':'이 기관의 홍보 노출 상태를 변경하시겠습니까?'))return;
-  try{const r=await call('admin_contract',{facilityId:selectedId,command,start:formValue('a-start'),end:formValue('a-end'),paymentConfirmed:$('a-paid').checked,reference:formValue('a-reference')});setMessage('a-contract-message',`계약 ${command} 완료 · 현재 공개 ${r.visible?'예':'아니오'} · 정원 ${r.capacity}곳`);await loadAdmin();selectFacility(selectedId);await loadPublic();}catch(e){setMessage('a-contract-message','계약 처리 실패: '+e.message);}}
+  try{const r=await call('admin_contract',{facilityId:selectedId,command,start:formValue('a-start'),end:formValue('a-end'),paymentConfirmed:$('a-paid').checked,reference:formValue('a-reference')});setMessage('a-contract-message',`계약 ${command} 완료 · 현재 공개 ${r.visible?'예':'아니오'} · 정원 ${r.capacity}곳`);await loadAdmin();if(!adminFacilities.find(f=>f.id===selectedId)){const d=await call('admin_facility_detail',{facilityId:selectedId});adminFacilities.unshift(d.facility);}selectFacility(selectedId);await loadAdminOverview();await loadPublic();}catch(e){setMessage('a-contract-message','계약 처리 실패: '+e.message);}}
 $('a-activate').onclick=()=>changeContract('activate');$('a-suspend').onclick=()=>changeContract('suspend');$('a-end-contract').onclick=()=>changeContract('end');
 $('a-refresh-requests').onclick=refreshRequests;
 function renderAdminRequests(){
@@ -478,3 +560,4 @@ $('a-field-publish').onclick=async()=>{
 
 // Only public approved paid institutions are requested at start.
 loadPublic();
+recordVisit('site_visit');

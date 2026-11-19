@@ -1,4 +1,6 @@
 import {createHash, randomBytes, randomUUID} from 'node:crypto';
+import {cleanTrackingRequest,trackingKeys,lastDays,aggregateReport} from './_shared/analytics-policy.mjs';
+import {adminSearchParams,adminMatchesFacility,adminPageResult} from './_shared/admin-search.mjs';
 import {getStorage} from 'firebase-admin/storage';
 import {validateFieldDraft,publicFieldRows,FIELD_IDS} from './_shared/field-policy.mjs';
 import {invoiceAmount,normalizeOrderMonths,providerOrderView,ORDER_PENDING,ORDER_PAID,ORDER_CANCELED} from './_shared/payment-policy.mjs';
@@ -13,7 +15,7 @@ const getBody=(event)=>{
   try{return JSON.parse(event.body||'{}')}catch{fail(400,'JSON 형식이 유효하지 않습니다.');}
 };
 async function readFacility(s,id){const snap=await sRef(s,id).get();if(!snap.exists)fail(404,'등록된 기관을 찾을 수 없습니다.');return {id:snap.id,...snap.data()};}
-function safeFacility(f){const {id,name,type,region,district,address,phone,description,homepage,imageUrl,officialId,source,sourceDate,lastConfirmedAt,publicationStatus,advertisingStatus,paymentStatus,contractStart,contractEnd,managerUids}=f;return {id,name,type,region,district,address,phone,description,homepage,imageUrl,officialId,source,sourceDate,lastConfirmedAt,publicationStatus,advertisingStatus,paymentStatus,contractStart,contractEnd,managerUids:managerUids||[]};}
+function safeFacility(f){const {id,name,type,region,district,address,phone,description,homepage,imageUrl,officialId,source,sourceDate,lastConfirmedAt,publicationStatus,advertisingStatus,paymentStatus,contractStart,contractEnd,managerUids,paymentReference,paidConfirmedBy,paidConfirmedAt,createdAt,updatedAt}=f;return {id,name,type,region,district,address,phone,description,homepage,imageUrl,officialId,source,sourceDate,lastConfirmedAt,publicationStatus,advertisingStatus,paymentStatus,contractStart,contractEnd,managerUids:managerUids||[],paymentReference:paymentReference||'',paidConfirmedBy:paidConfirmedBy||'',paidConfirmedAt:paidConfirmedAt?.toDate?.()?.toISOString?.()||'',createdAt:createdAt?.toDate?.()?.toISOString?.()||'',updatedAt:updatedAt?.toDate?.()?.toISOString?.()||''};}
 function quotaDoc(s,f){return s.db.collection('ci_quotas').doc(key(f.region,f.district,f.type));}
 function activeSlots(v,today=todayKST()){const entries=v?.slots||{};return Object.fromEntries(Object.entries(entries).filter(([,end])=>typeof end==='string'&&end>=today));}
 async function publish(s,f){
@@ -47,10 +49,46 @@ async function privateQuota(s,u,q){
   return {region,district,type,capacity,active,remaining:Math.max(0,capacity-active),price:getPrivatePrices()[type],note:'홍보 정원은 시범 운영 정책이며 지역 전체 기관 수를 뜻하지 않습니다.'};
 }
 async function listAdmin(s,p){
-  const limit=Number(p.pageSize)||100;if(limit<1||limit>200)fail(400,'페이지 크기는 1~200입니다.');
-  let q=s.db.collection('ci_facilities').orderBy('__name__').limit(limit);
-  const after=txt(p.after,90);if(after)q=q.startAfter(after);
-  const snap=await q.get();return {items:snap.docs.map(d=>safeFacility({id:d.id,...d.data()})),next:snap.size===limit?snap.docs.at(-1).id:null};
+  let filter;try{filter=adminSearchParams(p);}catch(e){fail(400,e.message);}
+  if(filter.region&&!regions[filter.region])fail(400,'검색할 시·도를 확인하세요.');
+  if(filter.district&&(!filter.region||!regions[filter.region].includes(filter.district)))fail(400,'검색할 시·군·구를 확인하세요.');
+  if(filter.type&&!types.includes(filter.type))fail(400,'검색할 기관 유형을 확인하세요.');
+  const col=s.db.collection('ci_facilities');
+  // 필터 없이 불러올 때는 가볍게 1페이지만 조회합니다.
+  if(!filter.query&&!filter.region&&!filter.district&&!filter.type){
+    let q=col.orderBy('__name__').limit(filter.pageSize);
+    if(filter.after)q=q.startAfter(filter.after);
+    const snap=await q.get();
+    return {items:snap.docs.map(d=>safeFacility({id:d.id,...d.data()})),next:snap.size===filter.pageSize?(snap.docs.at(-1)?.id||''):'',scanned:snap.size,partial:false};
+  }
+  // 예전에 등록된 약 3,800개 기관에는 검색 색인이 없으므로, 관리자만 전체 문서를 스캔해 검색합니다.
+  // 최대 6,000개 문서씩 검사하고 다음 커서를 제공하여 향후 기관 수 증가에도 검색이 가능합니다.
+  const found=[];let last=filter.after,scanned=0,exhausted=false;
+  while(found.length<filter.pageSize&&scanned<6000){
+    let q=col.orderBy('__name__').limit(400);
+    if(last)q=q.startAfter(last);
+    const snap=await q.get();
+    if(snap.empty){exhausted=true;break;}
+    for(const doc of snap.docs){
+      last=doc.id;scanned++;
+      const item={id:doc.id,...doc.data()};
+      if(adminMatchesFacility(item,filter))found.push(safeFacility(item));
+      if(found.length>=filter.pageSize||scanned>=6000)break;
+    }
+    if(snap.size<400&&found.length<filter.pageSize){exhausted=true;break;}
+  }
+  return adminPageResult({items:found,after:last,scanned,limitReached:scanned>=6000,exhausted});
+}
+async function adminOverview(s,u){requireAdmin(u);
+  const col=s.db.collection('ci_facilities');
+  const [all,active,pending]=await Promise.all([
+    col.count().get(),col.where('advertisingStatus','==','active').count().get(),col.where('publicationStatus','==','pending').count().get()
+  ]);
+  return {total:all.data().count||0,active:active.data().count||0,pending:pending.data().count||0,notice:'관리자 전용 전체 기관 집계. 비공개 후보 포함.'};
+}
+async function adminFacilityDetail(s,u,b){requireAdmin(u);
+  const id=txt(b.facilityId,90);if(!id)fail(400,'기관 ID가 필요합니다.');
+  return {facility:safeFacility(await readFacility(s,id))};
 }
 async function createOrEdit(s,u,b){requireAdmin(u);
   const requestedId=txt(b.facilityId,90);
@@ -456,6 +494,50 @@ async function adminReviewPaymentOrder(s,u,b){requireAdmin(u);
   return {...ret,notice:decision===ORDER_PAID?'신청 건의 실제 입금 확인을 기록했습니다. 게시 승인과 광고 계약 활성화는 별도 관리 화면에서 진행해야 합니다.':'신청이 취소되었습니다.'};
 }
 
+// [v2.8] 비로그인 사용자의 페이지 이용을 일별 익명 브라우저 세션으로 집계합니다.
+// 카카오 UID, IP, 전화번호, 의료/건강정보, URL 쿼리 등은 기록하지 않습니다.
+const trackingCollection=s=>s.db.collection('dj_analytics_daily');
+const trackingDedup=s=>s.db.collection('dj_analytics_dedup');
+async function recordPublicVisit(s,event,body){
+  // 시험 브랜치는 운영 데이터베이스에 기록을 남기지 않습니다.
+  if(process.env.CONTEXT!=='production')return {counted:false,testMode:true,note:'시험 배포에서는 방문 성과를 집계하지 않습니다.'};
+  const origin=event.headers?.origin||event.headers?.Origin||'';
+  const host=event.headers?.host||event.headers?.Host||'';
+  if(origin&&(!host||new URL(origin).host!==host))fail(403,'다른 사이트의 기록 요청을 허용하지 않습니다.');
+  let t;try{t=cleanTrackingRequest(body);}catch(e){fail(400,e.message);}
+  if(t.facilityId){
+    const ref=s.db.collection('ci_public').doc(t.facilityId);
+    const snap=await ref.get(),f=snap.data();
+    if(!f||f.advertisement!==true||!f.contractStart||f.contractStart>todayKST()||f.contractEnd<todayKST())fail(404,'현재 공개 참여기관이 아닙니다.');
+    const state=await s.db.collection('ci_assessment_states').doc(t.facilityId).get();
+    if(state.data()?.riskHold===true)fail(404,'현재 공개 참여기관이 아닙니다.');
+  }
+  const day=todayKST(),k=trackingKeys(day,t);
+  const seen=trackingDedup(s).doc(k.dedupId),daily=trackingCollection(s).doc(k.dailyDoc);
+  const now=Date.now();
+  const counted=await s.db.runTransaction(async tx=>{
+    const existing=await tx.get(seen);
+    if(existing.exists)return false;
+    // 이 문서의 TTL 필드는 Firebase 콘솔에서 35일 만료 정책을 지정해야 자동 삭제됩니다.
+    tx.create(seen,{day,metric:t.metric,expireAt:new Date(now+35*86400000),createdAt:s.FieldValue.serverTimestamp()});
+    tx.set(daily,{day,scope:t.metric==='site_visit'?'site':'facility',...(t.facilityId?{facilityId:t.facilityId}:{}),[k.field]:s.FieldValue.increment(1),updatedAt:s.FieldValue.serverTimestamp()},{merge:true});
+    return true;
+  });
+  return {counted};
+}
+async function readAnalyticsReport(s,facilityId){
+  const days=lastDays(todayKST(),30);
+  const siteRefs=days.map(day=>trackingCollection(s).doc(day+'__site'));
+  const facRefs=facilityId?days.map(day=>trackingCollection(s).doc(day+'__facility_'+facilityId)):[];
+  const [siteDocs,facDocs]=await Promise.all([
+    Promise.all(siteRefs.map(ref=>ref.get())),
+    Promise.all(facRefs.map(ref=>ref.get()))
+  ]);
+  return {periodStart:days[0],periodEnd:days.at(-1),facilityId:facilityId||'',...aggregateReport(days,siteDocs.map(d=>d.data()||{}),days.map((_,i)=>facDocs[i]?.data()||{})),method:'하루 한 번 집계한 익명 브라우저 세션 수. 실제 사람 수나 상담·입소 실적이 아닙니다.',testMode:process.env.CONTEXT!=='production'};
+}
+async function facilityMyAnalytics(s,u){const f=await getMy(s,u);return {facilityName:f.name,...await readAnalyticsReport(s,f.id)};}
+async function adminAnalytics(s,u,b){requireAdmin(u);const id=txt(b.facilityId,90);if(id)await readFacility(s,id);return {facilityName:id?(await readFacility(s,id)).name:'',...await readAnalyticsReport(s,id)};}
+
 export async function handler(event){
   try{
     const method=event.httpMethod;
@@ -463,12 +545,13 @@ export async function handler(event){
     const body=method==='POST'?getBody(event):(event.queryStringParameters||{}),action=txt(body.action,60);
     // Netlify branch-deploy는 운영 DB와 환경변수를 공유할 수 있으므로 반드시 읽기 전용.
     // 관리자/기관이라고 해도 지점별 자료수정·입금확인·신청등록을 시험 주소에서는 차단합니다.
-    const stagingReadActions=new Set(['my_account','my_facility','private_quota','private_plan_prices','requests','my_assessment_state','admin_field_state','admin_pending_assessments','admin_list','admin_quotas','facility_order_quote','facility_my_orders','admin_payment_orders']);
+    const stagingReadActions=new Set(['my_account','my_facility','private_quota','private_plan_prices','requests','my_assessment_state','admin_field_state','admin_pending_assessments','admin_list','admin_quotas','facility_order_quote','facility_my_orders','admin_payment_orders','facility_my_analytics','admin_analytics','admin_overview','admin_facility_detail','public_track']);
     if(process.env.CONTEXT!=='production' && method==='POST' && !stagingReadActions.has(action))fail(403,'시험 배포 사이트는 운영자료 보호를 위해 읽기 전용입니다. 입력 동작은 동봉된 오프라인 미리보기에서 시험하세요.');
     const s=services();
     if(method==='GET'&&action==='public_list')return response(200,{ok:true,items:await listPublic(s,body)});
     if(method==='GET'&&action==='public_assessment')return response(200,{ok:true,...await publicAssessment(s,body)});
     if(method==='GET'&&action==='public_field_inspection')return response(200,{ok:true,...await publicFieldInspection(s,body)});
+    if(method==='POST'&&action==='public_track')return response(200,{ok:true,...await recordPublicVisit(s,event,body)});
 
     const u=await authUser(event,s);
     let result;
@@ -484,6 +567,8 @@ export async function handler(event){
         break;
       }
       case 'my_facility': result={facility:await getMy(s,u)};break;
+      case 'facility_my_analytics':result=await facilityMyAnalytics(s,u);break;
+      case 'admin_analytics':result=await adminAnalytics(s,u,body);break;
       case 'facility_order_quote': result=await facilityOrderQuote(s,u,body);break;
       case 'facility_create_order': result=await facilityCreateOrder(s,u,body);break;
       case 'facility_my_orders': result=await facilityMyOrders(s,u);break;
@@ -497,6 +582,8 @@ export async function handler(event){
       case 'admin_pending_assessments': result={items:await listAssessmentPending(s,u)};break;
       case 'admin_review_assessment': result=await adminReviewAssessment(s,u,body);break;
       case 'admin_list':requireAdmin(u);result=await listAdmin(s,body);break;
+      case 'admin_overview':result=await adminOverview(s,u);break;
+      case 'admin_facility_detail':result=await adminFacilityDetail(s,u,body);break;
       case 'admin_quotas':requireAdmin(u);result={items:await getQuotas(s)};break;
       case 'admin_set_quota':result=await setQuota(s,u,body);break;
       case 'admin_save_facility':result=await createOrEdit(s,u,body);break;
