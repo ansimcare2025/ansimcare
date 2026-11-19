@@ -1,0 +1,25 @@
+{
+  "name": "돌봄지음 호남",
+  "short_name": "돌봄지음",
+  "description": "광주·전남·전북 유료 홍보 참여 돌봄기관 안내",
+  "lang": "ko-KR",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f4f8f2",
+  "theme_color": "#153d32",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}

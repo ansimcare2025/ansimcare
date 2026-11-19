@@ -6,7 +6,7 @@ function popupHTML(token,redirectMode,origin){
   // Custom Token is short-lived. Never put access/refresh tokens in client storage.
   const packet=JSON.stringify({type:'careindex-kakao',token}).replaceAll('<','\\u003c');
   const target=JSON.stringify(origin);
-  return `<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="referrer" content="no-referrer"><title>케어인덱스 로그인</title></head><body><p>로그인 확인 중입니다.</p><script>
+  return `<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="referrer" content="no-referrer"><title>돌봄지음 호남 로그인</title></head><body><p>로그인 확인 중입니다.</p><script>
   const packet=${packet};
   if(${redirectMode?'false':'true'} && window.opener && !window.opener.closed){window.opener.postMessage(packet,${target});window.close();document.body.textContent='로그인이 완료되었습니다. 이 창을 닫아주세요.';}
   else{window.location.replace('/#kakao_token='+encodeURIComponent(packet.token));}
@@ -37,7 +37,7 @@ export async function handler(event){
     if(!/^\d+$/.test(String(user.id||'')))throw Error('missing-user-id');
     const s=services();
     const uid='kakao:'+String(user.id);
-    const nickname=String(user.kakao_account?.profile?.nickname||'케어인덱스 회원').slice(0,70);
+    const nickname=String(user.kakao_account?.profile?.nickname||'돌봄지음 회원').slice(0,70);
     try{await s.auth.getUser(uid);}catch(e){if(e.code!=='auth/user-not-found')throw e;try{await s.auth.createUser({uid,displayName:nickname});}catch(c){if(c.code!=='auth/uid-already-exists')throw c;}}
     await s.db.collection('ci_users').doc(uid).set({provider:'kakao',nickname,lastLoginAt:s.FieldValue.serverTimestamp()},{merge:true});
     const firebaseToken=await s.auth.createCustomToken(uid);

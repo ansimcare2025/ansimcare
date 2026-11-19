@@ -2,8 +2,8 @@ import { randomBytes, createHash } from 'node:crypto';
 import { initializeApp, cert, getApps } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
-import { regions, types, prices, defaultCap, dateOK, todayKST, visible } from './business-rules.mjs';
-export { regions, types, prices, defaultCap, dateOK, todayKST, visible } from './business-rules.mjs';
+import { regions, types, getPrivatePrices, defaultCap, dateOK, todayKST, visible } from './business-rules.mjs';
+export { regions, types, getPrivatePrices, defaultCap, dateOK, todayKST, visible } from './business-rules.mjs';
 
 export function fail(status,message){const e=new Error(message);e.statusCode=status;throw e;}
 export function txt(x,n=150){return typeof x==='string'?x.trim().slice(0,n):'';}

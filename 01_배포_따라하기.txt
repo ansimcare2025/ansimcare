@@ -1,0 +1,42 @@
+돌봄지음 호남 v2.5 — 초보자용 배포 순서
+====================================
+
+A. 먼저 확인
+  1) 현재 운영 주소: https://careindex-honam.netlify.app/
+  2) 운영 GitHub 저장소: ansimcare2025/ansimcare
+  3) 기존 운영 브랜치: careindex-v2  (절대 먼저 덮어쓰지 않기)
+  4) Firebase 운영 프로젝트: ansimcare-9bae3
+
+B. 컴퓨터에서 업로드 준비
+  1) ZIP을 다운로드해 '압축 풀기'를 합니다.
+  2) 압축을 푼 폴더를 열고 00_먼저읽기.txt를 확인합니다.
+  3) GitHub 저장소에서 기존 브랜치 careindex-v2의 백업을 만듭니다.
+  4) 새 시험 브랜치 dolbom-v25-test를 만듭니다.
+  5) 위 폴더의 소스 파일과 폴더('site', 'netlify', 'firebase', 'tests', 'scripts', 'package.json', 'netlify.toml')를 브랜치 최상단에 그대로 업로드합니다.
+     * 전체 ZIP을 파일 1개로 업로드하면 프로그램이 배포되지 않습니다.
+     * 기존 DB 자료를 CSV로 다시 넣을 필요가 없습니다.
+
+C. Netlify 시험 배포
+  1) Netlify의 기존 careindex-honam 프로젝트에서 Deploy Preview 또는 별도 시험 사이트를 연결합니다.
+  2) Netlify 설정의 Publish directory는 'site', Functions directory는 'netlify/functions'인지 확인합니다.
+  3) 운영용 기존 변수 4개를 확인: FIREBASE_SERVICE_ACCOUNT_JSON / KAKAO_REST_API_KEY / KAKAO_CLIENT_SECRET(사용하는 경우) / KAKAO_REDIRECT_URI.
+  4) 신규 비공개 변수 DOLBOM_AD_RATES_JSON을 Netlify에 추가합니다. 숫자는 원 단위 정수이며 GitHub 파일에는 적지 않습니다.
+     예: {"방문돌봄":100000,"주야간보호":150000,"요양원":200000,"요양병원":300000}
+     예시 금액은 2026년 11월 논의한 안이며 실제 계약요금은 운영자가 결정합니다.
+  5) Deploy Preview에서는 카카오 인증 도메인/Redirect URI가 기존 운영 주소로만 지정된 경우 로그인이 되지 않을 수 있습니다.
+     리다이렉트 테스트가 어렵다면 기존 운영 주소와 연결된 별도 확인 절차로 검증하되, 기존 서비스에 영향을 주는 변경은 신중하게 처리하세요.
+
+D. 필수 확인
+  1) 비로그인 PC/휴대폰: '돌봄지음 호남', 9영역 점검기준, 유료 광고 고지 표시.
+  2) 비로그인: 홍보료 메뉴/정원 정보 숨김. /api?action=private_quota 는 401, 공개 가격은 없음.
+  3) 뒤로/앞으로 이동 버튼: 홈 → 검색 → 점검기준 → 뒤로 → 앞으로.
+  4) 관리자 로그인: 이전과 동일한 Firebase UID로 인식, 기관 수/자료 유지, CSV 백업 동작.
+  5) 기관 계정: 본인 기관만 조회, 홍보료/정원 조회, 자체점검 제출 동작.
+  6) 관리자: 자체점검 검토, 자료 출처 구분, 위험 보고 시 게시 보류와 해제 절차 점검.
+  7) 보호자: 승인·계약·입금 및 날짜 유효한 기관만 검색 결과 노출.
+  8) 모바일: Android Chrome '홈 화면에 추가' / iPhone Safari '공유 → 홈 화면에 추가'. APK 제공 아님.
+
+E. 최종 배포
+  위 시험이 통과한 뒤에만 Production branch를 시험 브랜치로 전환하거나 기존 브랜치에 병합합니다.
+  Netlify 'Production branch' 변경은 실제 운영 사이트에 반영되므로 확인하고 진행합니다.
+  새 외부 도메인 연결 시 카카오 Redirect URI와 Firebase 승인 도메인을 함께 갱신합니다.

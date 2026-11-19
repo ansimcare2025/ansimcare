@@ -5,7 +5,18 @@ export const regions = {
   '전북':['전주시 완산구','전주시 덕진구','군산시','익산시','정읍시','남원시','김제시','완주군','진안군','무주군','장수군','임실군','순창군','고창군','부안군']
 };
 export const types = ['요양병원','요양원','주야간보호','방문돌봄'];
-export const prices = {'요양병원':300000,'요양원':200000,'주야간보호':150000,'방문돌봄':100000};
+// Commercial rates are stored only in private Netlify environment variables.
+// Never put actual rates in this public GitHub source tree.
+export function getPrivatePrices(){
+  const raw=process.env.DOLBOM_AD_RATES_JSON;
+  if(!raw)throw Object.assign(new Error('광고요금 환경변수 설정 필요'),{statusCode:503});
+  let data;
+  try{data=JSON.parse(raw);}catch{throw Object.assign(new Error('광고요금 JSON 형식을 확인하세요.'),{statusCode:503});}
+  if(!data||typeof data!=='object'||types.some(t=>!Number.isSafeInteger(data[t])||data[t]<0||data[t]>1e8)){
+    throw Object.assign(new Error('광고요금이 올바르게 설정되지 않았습니다.'),{statusCode:503});
+  }
+  return Object.fromEntries(types.map(t=>[t,data[t]]));
+}
 export function defaultCap(region,district,type){
   const dense=region==='광주'||district.startsWith('전주시 ');
   const city=dense||district.endsWith('시');

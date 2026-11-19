@@ -1,6 +1,7 @@
 import {createHash, randomBytes, randomUUID} from 'node:crypto';
 import {getStorage} from 'firebase-admin/storage';
-import { services, authUser, requireAdmin, response, wrapError, fail, txt, regions, types, prices, key, defaultCap, dateOK, todayKST, visible, publicFields, normalizedFacility, facilityId, audit, emailOK, ensureLocation, ensureType } from './_shared/core.mjs';
+import {DOMAINS, SUPPORTED_TYPES, addMonths, checkSelf, checkReview, publicReview, riskReleaseAllowed} from './_shared/assessment-policy.mjs';
+import { services, authUser, requireAdmin, response, wrapError, fail, txt, regions, types, getPrivatePrices, key, defaultCap, dateOK, todayKST, visible, publicFields, normalizedFacility, facilityId, audit, emailOK, ensureLocation, ensureType } from './_shared/core.mjs';
 const sRef=(s,id)=>s.db.collection('ci_facilities').doc(id);
 const empty={publicationStatus:'pending',advertisingStatus:'pending',paymentStatus:'unconfirmed',contractStart:'',contractEnd:'',managerUids:[],lastConfirmedAt:'',createdAt:null};
 const sortTime=(f)=>f.createdAt?.toMillis?.()||0;
@@ -15,7 +16,10 @@ function quotaDoc(s,f){return s.db.collection('ci_quotas').doc(key(f.region,f.di
 function activeSlots(v,today=todayKST()){const entries=v?.slots||{};return Object.fromEntries(Object.entries(entries).filter(([,end])=>typeof end==='string'&&end>=today));}
 async function publish(s,f){
   const ref=s.db.collection('ci_public').doc(f.id);
-  if(visible(f))await ref.set(publicFields(f,f.id));
+  // 기관 소개 수정/계약 재활성화 중에도 안전·인권 게시보류를 무시할 수 없습니다.
+  const state=await s.db.collection('ci_assessment_states').doc(f.id).get();
+  const riskHold=state.data()?.riskHold===true;
+  if(visible(f)&&!riskHold)await ref.set(publicFields(f,f.id));
   else await ref.delete();
 }
 async function listPublic(s,q){
@@ -28,13 +32,17 @@ async function listPublic(s,q){
   const data=snap.docs.map(d=>({id:d.id,...d.data()})).filter(f=>f.advertisement&&f.contractStart<=todayKST()&&f.contractEnd>=todayKST() && (!region||region==='전체'||f.region===region)&&(!district||district==='전체'||f.district===district)&&(!type||type==='전체'||f.type===type)&&(!word||[f.name,f.district,f.address,f.description].join(' ').toLocaleLowerCase().includes(word)));
   return data.sort((a,b)=>String(a.name).localeCompare(String(b.name),'ko')).map(f=>{const {contractStart,contractEnd,...p}=f;return p;});
 }
-async function publicQuota(s,q){
-  const region=txt(q.region,15),district=txt(q.district,35),type=txt(q.type,25);
+async function privateQuota(s,u,q){
+  if(!['facility','admin'].includes(u.role))fail(403,'승인된 기관·관리자 계정만 이용할 수 있습니다.');
+  let region=txt(q.region,15),district=txt(q.district,35),type=txt(q.type,25);
+  if(u.role==='facility'){
+    const f=await getMy(s,u);region=f.region;district=f.district;type=f.type;
+  }
   if(!regions[region]?.includes(district)||!types.includes(type))fail(400,'지역과 기관 유형을 선택하세요.');
   const snap=await s.db.collection('ci_quotas').doc(key(region,district,type)).get();
   const raw=snap.data()||{};const capacity=Number.isInteger(raw.capacity)?raw.capacity:defaultCap(region,district,type);
   const active=Object.keys(activeSlots(raw)).length;
-  return {region,district,type,capacity,active,remaining:Math.max(0,capacity-active),price:prices[type],note:'홍보 정원은 시범 운영 정책이며 지역 전체 기관 수를 뜻하지 않습니다.'};
+  return {region,district,type,capacity,active,remaining:Math.max(0,capacity-active),price:getPrivatePrices()[type],note:'홍보 정원은 시범 운영 정책이며 지역 전체 기관 수를 뜻하지 않습니다.'};
 }
 async function listAdmin(s,p){
   const limit=Number(p.pageSize)||100;if(limit<1||limit>200)fail(400,'페이지 크기는 1~200입니다.');
@@ -169,7 +177,8 @@ async function reviewProfile(s,u,b){requireAdmin(u);
     if(decision==='approved'){
       const prior=old.data();
       if(prior.advertisingStatus==='active'&&[prior.type,prior.region,prior.district].join('|')!==[v.payload.type,v.payload.region,v.payload.district].join('|'))fail(409,'홍보 중인 기관의 유형·소재지 변경은 먼저 계약을 중지하세요.');
-      tx.update(fref,{...v.payload,imageUrl:imageUrl||v.payload.imageUrl||prior.imageUrl||'',photoPath:s.FieldValue.delete(),publicationStatus:'approved',lastConfirmedAt:todayKST(),updatedAt:s.FieldValue.serverTimestamp()});
+      // 소개글 승인과 사이트 게시 승인은 별개. 안전점검 보류 등 게시상태를 유지합니다.
+      tx.update(fref,{...v.payload,imageUrl:imageUrl||v.payload.imageUrl||prior.imageUrl||'',photoPath:s.FieldValue.delete(),publicationStatus:prior.publicationStatus||'pending',lastConfirmedAt:todayKST(),updatedAt:s.FieldValue.serverTimestamp()});
     }
     tx.update(ref,{status:decision,reason,reviewedBy:u.uid,reviewedAt:s.FieldValue.serverTimestamp()});
   });
@@ -179,6 +188,7 @@ async function reviewProfile(s,u,b){requireAdmin(u);
 async function adminApprove(s,u,b){requireAdmin(u);
   const id=txt(b.facilityId,100),value=txt(b.status,30);
   if(!['approved','pending','rejected'].includes(value))fail(400,'승인 상태를 확인하세요.');
+  if(value==='approved'){const a=await s.db.collection('ci_assessment_states').doc(id).get();if(a.data()?.riskHold)fail(409,'돌봄 안전·인권 우려로 게시가 보류된 기관입니다. 재점검 및 관리자 검토 승인 후 게시할 수 있습니다.');}
   await sRef(s,id).update({publicationStatus:value,updatedAt:s.FieldValue.serverTimestamp(),lastConfirmedAt:value==='approved'?todayKST():''});
   const f=await readFacility(s,id);await publish(s,f);
   await audit(s,u.uid,'admin_approve',id,{value});return {facility:safeFacility(f)};
@@ -195,6 +205,8 @@ async function contract(s,u,b){requireAdmin(u);
     const f=snap.data();
     const slotRef=quotaDoc(s,f);
     const slotSnap=await tx.get(slotRef);
+    const safetySnap=await tx.get(s.db.collection('ci_assessment_states').doc(id));
+    if(command==='activate'&&safetySnap.data()?.riskHold===true)fail(409,'안전·인권 우려로 게시가 보류되어 있습니다. 관리자 재검토 후 계약을 진행하세요.');
     const old=slotSnap.data()||{};const slots=activeSlots(old);
     const capacity=Number.isInteger(old.capacity)?old.capacity:defaultCap(f.region,f.district,f.type);
     if(command==='activate'){
@@ -217,7 +229,7 @@ async function getQuotas(s){
   for(const [region,districts] of Object.entries(regions))for(const district of districts)for(const type of types){
     const q=map.get(key(region,district,type))||{};const active=Object.keys(activeSlots(q)).length;
     const capacity=Number.isInteger(q.capacity)?q.capacity:defaultCap(region,district,type);
-    rows.push({region,district,type,capacity,active,remaining:Math.max(0,capacity-active),monthlyPrice:prices[type]});
+    rows.push({region,district,type,capacity,active,remaining:Math.max(0,capacity-active),monthlyPrice:getPrivatePrices()[type]});
   }
   return rows;
 }
@@ -238,6 +250,97 @@ async function getMy(s,u){if(u.role!=='facility')fail(403,'기관 계정이 필�
   if(!(f.managerUids||[]).includes(u.uid))fail(403,'기관 연결이 유효하지 않습니다.');return safeFacility(f);
 }
 async function getMyAccount(s,u){return {uid:u.uid,role:u.role||'guardian',facilityId:u.facilityId||'',email:u.email||'',displayName:u.name||''};}
+// 기관 자체점검은 비공개 제출물로 저장합니다. 관리자 검토 없이 공개되지 않습니다.
+async function submitSelfAssessment(s,u,b){
+  const f=await getMy(s,u);if(!SUPPORTED_TYPES.includes(f.type))fail(400,'현재 정기 자체점검은 요양병원·요양원에 우선 적용합니다.');
+  let answers;try{answers=checkSelf(b.answers);}catch(e){fail(400,e.message);}
+  const note=txt(b.generalNote,500);
+  const reportRef=s.db.collection('ci_assessment_reports').doc();
+  const stateRef=s.db.collection('ci_assessment_states').doc(f.id);
+  const reportedRiskDomains=Object.entries(answers).filter(([,v])=>v==='우려').map(([id])=>id);
+  const risky=reportedRiskDomains.length>0;const day=todayKST();
+  await s.db.runTransaction(async tx=>{
+    const prior=await tx.get(stateRef);
+    const last=prior.data()?.submittedAtMs||0;
+    if(Date.now()-last<60*60*1000)fail(429,'중복 등록 방지를 위해 한 시간 뒤에 재제출할 수 있습니다.');
+    tx.create(reportRef,{facilityId:f.id,facilityName:f.name,facilityType:f.type,answers,generalNote:note,submittedBy:u.uid,submittedAt:s.FieldValue.serverTimestamp(),submittedDate:day,status:'pending',schemaVersion:'1.0'});
+    const previousRisk=Array.isArray(prior.data()?.riskDomains)?prior.data().riskDomains:[];
+    const unresolvedRisk=[...new Set([...previousRisk,...reportedRiskDomains])];
+    tx.set(stateRef,{facilityId:f.id,lastSubmittedDate:day,submittedAtMs:Date.now(),lastReportId:reportRef.id,nextSelfDue:addMonths(day,6),status:(risky||prior.data()?.riskHold)?'safety_hold':'pending',riskHold:risky?true:(prior.data()?.riskHold||false),riskDomains:unresolvedRisk,updatedAt:s.FieldValue.serverTimestamp()},{merge:true});
+    if(risky){tx.update(sRef(s,f.id),{publicationStatus:'pending',updatedAt:s.FieldValue.serverTimestamp()});tx.delete(s.db.collection('ci_public').doc(f.id));}
+  });
+  await audit(s,u.uid,'self_assessment_submit',f.id,{reportId:reportRef.id,risky});
+  return {reportId:reportRef.id,status:'pending',nextSelfDue:addMonths(day,6),publicationPaused:risky};
+}
+async function selfAssessmentState(s,u){
+  const f=await getMy(s,u);
+  const snap=await s.db.collection('ci_assessment_states').doc(f.id).get();
+  const v=snap.data()||{};
+  return {facilityId:f.id,type:f.type,lastSubmittedDate:v.lastSubmittedDate||'',nextSelfDue:v.nextSelfDue||'',lastVerifiedDate:v.lastVerifiedDate||'',nextAnnualDue:v.nextAnnualDue||'',status:v.status||'아직 제출하지 않음'};
+}
+async function listAssessmentPending(s,u){requireAdmin(u);
+  // 1차 운영용 최근 80건 목록. 기관 증가 시 관리용 색인과 페이지네이션 필요.
+  const snap=await s.db.collection('ci_assessment_reports').orderBy('__name__','desc').limit(80).get();
+  return snap.docs.filter(d=>d.get('status')==='pending').map(d=>{
+    const v=d.data();return {id:d.id,facilityId:v.facilityId,facilityName:v.facilityName,facilityType:v.facilityType,answers:v.answers,submittedDate:v.submittedDate,generalNote:v.generalNote};
+  });
+}
+async function adminReviewAssessment(s,u,b){requireAdmin(u);
+  const reportId=txt(b.reportId,150),decision=txt(b.decision,25);
+  if(!['publish','revision','hold'].includes(decision))fail(400,'심사 처리 방법을 선택하세요.');
+  const ref=s.db.collection('ci_assessment_reports').doc(reportId);
+  const snap=await ref.get();if(!snap.exists)fail(404,'심사 기록을 찾을 수 없습니다.');
+  const record=snap.data();if(record.status!=='pending')fail(409,'이미 처리된 심사 기록입니다.');
+  const f=await readFacility(s,record.facilityId);
+  const stateRef=s.db.collection('ci_assessment_states').doc(f.id),pubRef=s.db.collection('ci_public_assessments').doc(f.id);
+  let rows=null;
+  if(decision==='publish'||decision==='hold'){
+    try{rows=checkReview(b.results);}catch(e){fail(400,e.message);}
+    if(decision==='publish'&&Object.values(rows).some(x=>x.finding==='우려'))fail(409,'안전·인권 관련 우려가 있으면 결과를 공개 승인할 수 없습니다. 게시 보류를 검토하세요.');
+    if(decision==='publish'&&!riskReleaseAllowed(record.answers,rows))fail(409,'기관이 보고한 안전·인권 우려 항목은 서류 또는 현장 점검 근거로 해소 여부를 확인해야 게시보류를 해제할 수 있습니다.');
+    if(decision==='hold'&&!Object.values(rows).some(x=>x.finding==='우려')&&!Object.values(record.answers).some(x=>x==='우려'))fail(400,'보류 근거가 된 위험 징후를 확인하세요.');
+  }
+  const today=todayKST(),message=txt(b.internalReason,400);
+  if(decision==='revision'&&!message)fail(400,'보완 요청 사유를 기록하세요.');
+  await s.db.runTransaction(async tx=>{
+    const current=await tx.get(ref);if(!current.exists||current.get('status')!=='pending')fail(409,'다른 관리자가 이미 검토했습니다.');
+    const facilityRef=sRef(s,f.id),state=await tx.get(stateRef);
+    const publicDoc=await tx.get(s.db.collection('ci_public').doc(f.id));
+    // 과거 보고서의 미해결 위험도 해소해야 함. 새로운 '양호' 자체보고로 보류를 풀 수 없음.
+    if(decision==='publish'&&state.data()?.riskHold===true){
+      const saved=Array.isArray(state.data()?.riskDomains)?state.data().riskDomains:[];
+      const required=saved.length?saved:['neglect','dignity','incident'];
+      if(!riskReleaseAllowed(record.answers,rows,required))fail(409,'이전에 보고된 안전·인권 위험의 해소 근거가 부족합니다. 관련 항목의 서류 또는 현장 확인과 구체적 근거를 기록하세요.');
+    }
+    if(decision==='publish'){
+      const safeRows=publicReview(rows);
+      tx.set(pubRef,{facilityId:f.id,facilityType:f.type,rows:safeRows,reviewedDate:today,sourceReportId:reportId,confirmedByAdmin:true,nextAnnualDue:addMonths(today,12),lastSelfDate:record.submittedDate}, {merge:false});
+      tx.set(stateRef,{status:'reviewed',riskHold:false,riskDomains:[],lastVerifiedDate:today,nextAnnualDue:addMonths(today,12),lastReviewReportId:reportId,updatedAt:s.FieldValue.serverTimestamp()},{merge:true});
+    }else if(decision==='hold'){
+      tx.update(facilityRef,{publicationStatus:'pending',updatedAt:s.FieldValue.serverTimestamp()});
+      tx.delete(s.db.collection('ci_public').doc(f.id));tx.delete(pubRef);
+      const reported=Object.entries(record.answers||{}).filter(([,v])=>v==='우려').map(([id])=>id);
+      const reviewed=Object.entries(rows||{}).filter(([,v])=>v.finding==='우려').map(([id])=>id);
+      const oldRisk=Array.isArray(state.data()?.riskDomains)?state.data().riskDomains:[];
+      tx.set(stateRef,{status:'safety_hold',riskHold:true,riskDomains:[...new Set([...oldRisk,...reported,...reviewed])],updatedAt:s.FieldValue.serverTimestamp()},{merge:true});
+    }else tx.set(stateRef,{status:'revision_requested',riskHold:state.data()?.riskHold||false,updatedAt:s.FieldValue.serverTimestamp()},{merge:true});
+    tx.update(ref,{status:decision==='publish'?'reviewed':decision==='hold'?'held':'revision_requested',reviewedBy:u.uid,reviewedDate:today,reviewedAt:s.FieldValue.serverTimestamp(),internalReason:message,results:rows||{}});
+  });
+  await audit(s,u.uid,'assessment_'+decision,f.id,{reportId});
+  return {reportId,status:decision,facilityId:f.id};
+}
+async function publicAssessment(s,b){
+  const facilityId=txt(b.facilityId,95);if(!facilityId)fail(400,'기관 ID가 필요합니다.');
+  const visibleSnap=await s.db.collection('ci_public').doc(facilityId).get();
+  const p=visibleSnap.data();const today=todayKST();
+  if(!p||p.advertisement!==true||!p.contractStart||p.contractStart>today||p.contractEnd<today)fail(404,'현재 공개된 참여기관이 아닙니다.');
+  const result=await s.db.collection('ci_public_assessments').doc(facilityId).get();
+  if(!result.exists)return {assessment:null,notice:'관리자 검토가 완료된 점검 결과가 아직 없습니다.'};
+  const v=result.data();
+  if(!v.confirmedByAdmin||!v.reviewedDate)return {assessment:null,notice:'공개 가능한 점검 결과가 없습니다.'};
+  if(v.nextAnnualDue<today)return {assessment:{reviewedDate:v.reviewedDate,expired:true},notice:'이전 점검 결과의 재확인 시점이 경과했습니다. 최근 결과를 다시 확인 중입니다.'};
+  return {assessment:{reviewedDate:v.reviewedDate,nextAnnualDue:v.nextAnnualDue,rows:v.rows,expired:false},notice:'돌봄지음 자체 확인정보이며 공적 인증이나 서비스 품질 보증이 아닙니다.'};
+}
 export async function handler(event){
   try{
     const method=event.httpMethod;
@@ -245,12 +348,26 @@ export async function handler(event){
     const body=method==='POST'?getBody(event):(event.queryStringParameters||{}),action=txt(body.action,60);
     const s=services();
     if(method==='GET'&&action==='public_list')return response(200,{ok:true,items:await listPublic(s,body)});
-    if(method==='GET'&&action==='public_quota')return response(200,{ok:true,...await publicQuota(s,body)});
+    if(method==='GET'&&action==='public_assessment')return response(200,{ok:true,...await publicAssessment(s,body)});
+
     const u=await authUser(event,s);
     let result;
     switch(action){
       case 'my_account': result=await getMyAccount(s,u);break;
+      case 'private_quota': result=await privateQuota(s,u,body);break;
+      case 'private_plan_prices': {
+        if(u.role==='admin')result={prices:getPrivatePrices()};
+        else if(u.role==='facility'){
+          const f=await getMy(s,u);
+          result={prices:{[f.type]:getPrivatePrices()[f.type]},region:f.region,district:f.district,type:f.type};
+        }else fail(403,'기관 또는 관리자 로그인이 필요합니다.');
+        break;
+      }
       case 'my_facility': result={facility:await getMy(s,u)};break;
+      case 'submit_self_assessment': result=await submitSelfAssessment(s,u,body);break;
+      case 'my_assessment_state': result=await selfAssessmentState(s,u);break;
+      case 'admin_pending_assessments': result={items:await listAssessmentPending(s,u)};break;
+      case 'admin_review_assessment': result=await adminReviewAssessment(s,u,body);break;
       case 'admin_list':requireAdmin(u);result=await listAdmin(s,body);break;
       case 'admin_quotas':requireAdmin(u);result={items:await getQuotas(s)};break;
       case 'admin_set_quota':result=await setQuota(s,u,body);break;
