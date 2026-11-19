@@ -34,7 +34,7 @@ function makeApp(){
   $:id=>controls[id],setMessage:(id,value)=>{messages[id]=value},
   TITLES:Object.fromEntries(pageNames.map(k=>[k,k])),
   session:{role:'guardian'},nextPage:null,openAuth:(role)=>loginCalls.push(role),
-  loadPublic:()=>{},loadMine:()=>{},loadAdmin:()=>{},loadAssessments:()=>{},loadPrivatePlans:()=>{}
+  loadPublic:()=>{},recordVisit:()=>{},loadMine:()=>{},loadAdmin:()=>{},loadAdminOverview:()=>{},loadAssessments:()=>{},loadAdminPaymentOrders:()=>{},loadAdminAnalytics:()=>{},loadPrivatePlans:()=>{}
  };
  vm.createContext(context);vm.runInContext(navigationCode,context);
  const active=()=>pageEls.find(e=>e.classList.active)?.id;

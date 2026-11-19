@@ -1,15 +1,40 @@
-돌봄지음 호남 v2.7 · 시험 배포 업로드 절차 (GitHub 화면 기준)
+돌봄지음 호남 v2.8.1 시험 업데이트 — PC 클릭 순서
 
-1. 먼저 돌봄지음 v2.7 통합 미리보기 HTML을 내려받아 더블클릭합니다.
-2. GitHub https://github.com/ansimcare2025/ansimcare/tree/dolbom-v25-test 에 접속합니다.
-3. 왼쪽 위 브랜치가 dolbom-v25-test 인지 확인합니다. careindex-v2는 변경하지 마세요.
-4. GitHub 업로드 전용 ZIP 압축을 풀고, 안에 있는 site / netlify / firebase / tests / scripts 와 netlify.toml / package.json 을 한꺼번에 업로드합니다.
-   ZIP 파일 자체를 올리지 않습니다. 폴더 구조를 그대로 유지합니다.
-5. GitHub [Add file] → [Upload files] → 모든 파일 확인 → [Commit changes] (dolbom-v25-test 직접 저장).
-6. Netlify careindex-honam → Deploys 에서 자동으로 만들어진 Branch Deploy를 확인합니다. 설정을 다시 만들 필요가 없습니다.
-7. Branch Deploy는 운영 데이터 보호를 위해 서버가 읽기 전용입니다. 임시저장/결제신청/계약승인 등의 실제 쓰기 동작은 오프라인 미리보기에서만 연습합니다.
-8. 카카오 로그인 복귀 주소·기관 권한·환경변수 요금 설정·모바일 호환성 등을 검토합니다.
-9. 운영 사이트 전환은 별도 승인과 백업, 실데이터 통합검증 이후 진행합니다. 시험 배포 상세화면에서 Publish deploy 버튼은 누르지 마세요.
+전제: 기존 GitHub 저장소 ansimcare2025/ansimcare, 시험 브랜치 dolbom-v25-test 및 Netlify 연결이 이미 완료된 상태입니다.
 
-중요: 운영 DB는 Firebase 프로젝트를 공유할 수 있습니다. 시험 Netlify 컨텍스트의 쓰기 API가 차단되도록 설계했습니다.
-전자결제 PG 연결과 수납 자동확인, 계약서/환불정책/세무·개인정보 검토가 끝나기 전까지 실거래 결제 시스템으로 소개하면 안 됩니다.
+1. '돌봄지음_v2.8.1_GitHub_변경파일11개.zip' 파일을 내려받아 [모두 압축 풀기] 합니다.
+2. https://github.com/ansimcare2025/ansimcare/tree/dolbom-v25-test 에 접속합니다.
+3. 화면 상단 브랜치가 dolbom-v25-test 인지 확인합니다. careindex-v2 / main으로 전환하지 마세요.
+4. [Add file] -> [Upload files]를 클릭합니다.
+5. ZIP이 아니라 압축을 푼 내용(11개의 변경 파일)을 폴더 구조를 유지한 채 올립니다.
+   사이트 루트에 site/app.js / site/index.html / site/analytics.css / site/운영안내.html
+   netlify/functions/api.mjs / kakao-start.mjs / kakao-callback.mjs
+   netlify/functions/_shared/analytics-policy.mjs / admin-search.mjs / kakao-origin.mjs
+   package.json 이 보이도록 합니다.
+   (현재 GitHub에 없는 폴더라면 전체 파일 패키지를 대신 사용하세요.)
+6. Commit directly to the dolbom-v25-test branch가 선택되었는지 확인합니다.
+7. Commit changes 제목은 '돌봄지음 호남 v2.8.1 관리자 전체기관·홍보성과'로 입력해 저장합니다.
+8. Netlify careindex-honam의 [Deploys]에서 Branch Deploy: dolbom-v25-test 가 Success인지 확인합니다.
+9. [Open branch deploy]를 눌러 PC·휴대폰·관리자 계정으로 조회 기능만 점검합니다.
+   시험 주소는 실제 기관정보 저장, 홍보 신청/결제, 승인 처리 등이 금지되어 있습니다.
+10. 현재 운영 사이트 careindex-honam.netlify.app 및 운영 브랜치 careindex-v2는 유지합니다.
+
+관리자 조회
+- [기관·계약·승인 관리] -> [전체 기관 검색]
+- 시·도, 시·군·구, 기관 유형, 기관명/코드/전화/주소로 전체 데이터 검색
+- [선택] 후 [선택 기관 · 관리자 전용 전체 정보]의 원본출처/공식ID/수납/계약 정보 확인
+- 비공개 후보도 관리자 권한으로 조회할 수 있습니다.
+- 전체 기관 CSV 백업은 기존 기능으로 유지합니다.
+
+기관 홍보 성과
+- 기관 담당자로 로그인 -> [기관 전용 화면] -> [우리 기관 홍보 성과]
+- 사이트 전체 방문, 내 기관 상세조회, 전화 버튼 클릭의 최근 30일 누적(브라우저 세션 단위)
+- 이 숫자는 방문 실제 인원, 전화 연결 성공, 계약·입소 실적을 뜻하지 않습니다.
+- 실운영 전 서버의 dj_analytics_dedup 컬렉션 expireAt TTL(35일)을 설정하고 운영안내 고지를 검토하세요.
+- 시험 사이트는 운영 DB 보호를 위해 실제 통계 이벤트를 저장하지 않습니다. 첫 운영 시작 시 값이 0일 수 있습니다.
+
+주의
+- 카카오 인증은 시험 도메인 Redirect URI가 카카오 개발자센터에 최초 1회 등록되어야 합니다.
+- 기존 운영용 Redirect URI는 지우지 마세요.
+- 기관별 가격은 로그인한 본인 기관 또는 관리자에게만 보입니다.
+- 카드결제 PG는 미연동 상태입니다. 실거래 수납 기능으로 안내하지 마세요.

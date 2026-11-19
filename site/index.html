@@ -2,7 +2,7 @@
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#153d32"><meta name="referrer" content="strict-origin-when-cross-origin"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="default"><meta name="apple-mobile-web-app-title" content="돌봄지음">
 <title>돌봄지음 호남 | 어르신 돌봄기관 홍보 참여기관 찾기</title>
 <meta name="description" content="광주·전남·전북 요양병원, 요양원, 주야간보호, 재가·방문돌봄의 유료 홍보 참여기관을 지역별로 살펴보세요.">
-<link rel="icon" href="./icon-192.png" type="image/png"><link rel="apple-touch-icon" href="./icon-192.png"><link rel="manifest" href="./manifest.webmanifest"><link rel="stylesheet" href="./design.css"><link rel="stylesheet" href="./v2.css"><link rel="stylesheet" href="./field-inspection.css"><link rel="stylesheet" href="./analytics.css"><link rel="stylesheet" href="./payment-checkout.css"><script src="./config.js"></script><script src="./app.js" type="module"></script>
+<link rel="icon" href="./icon-192.png" type="image/png"><link rel="apple-touch-icon" href="./icon-192.png"><link rel="manifest" href="./manifest.webmanifest"><link rel="stylesheet" href="./design.css"><link rel="stylesheet" href="./v2.css"><link rel="stylesheet" href="./field-inspection.css"><link rel="stylesheet" href="./analytics.css"><link rel="stylesheet" href="./payment-checkout.css"><link rel="stylesheet" href="./ui-fixes.css?v=v284-20261120"><script src="./config.js"></script><script src="./regions.js?v=v284-20261120"></script><script src="./app.js?v=v284-20261120" type="module"></script>
 <style>[hidden]{display:none !important}</style></head><body>
 <div class="wrap">
  <aside class="side"><div class="mark"><div class="logo">✦</div><div class="brand">돌봄지음<span class="brand-region">호남</span><small>DOLBOM JIEUM HONAM</small></div></div>
@@ -30,9 +30,14 @@
  <div class="content">
   <section class="page active" id="page-home"><div class="hero"><div class="hero-copy"><div class="kicker">DOLBOM JIEUM HONAM · GWANGJU / JEONNAM / JEONBUK</div><h2>우리 가족에게 맞는 돌봄,<br>신중하게 선택하도록.</h2><p>어르신에게 필요한 돌봄을 정리하고, 유료 홍보에 참여한 기관의 공개 정보를 지역별로 살펴봅니다. 기관의 홍보 참여와 객관적인 서비스 품질은 별개입니다.</p><div class="flex"><button class="btn btn-white" data-go="match">참여기관 찾아보기 →</button><button class="btn btn-orange" data-go="elder">돌봄 필요부터 정리하기</button></div></div><div class="hero-art"><div class="halo"></div><div class="circle"><svg viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M27 98 100 36l73 62v64H27V98Z" fill="#F4F9F2"/><path d="m17 100 83-72 83 72" stroke="#E1EDE0" stroke-width="13" stroke-linecap="round" stroke-linejoin="round"/><rect x="74" y="108" width="52" height="54" rx="5" fill="#C3D8C7"/><path d="M98 73c-26-28-55 9-25 33l25 21 26-21c31-24 0-60-26-33Z" fill="#D69072"/></svg></div></div></div>
   <div class="callout warn" style="margin-top:18px"><strong>유료 홍보 참여기관 안내</strong> — 이 서비스에는 돌봄지음과 광고 계약을 맺고 게시 승인을 받은 기관만 표시됩니다. 지역의 모든 요양기관을 검색하는 공적 기관목록이 아닙니다. 기관의 등급·서비스·가격·입소 가능 여부는 별도로 확인하세요.</div>
+  <section class="guardian-standards-cta" aria-labelledby="guardian-standards-heading">
+    <div class="guardian-standards-icon" aria-hidden="true">✓</div>
+    <div class="guardian-standards-copy"><span class="guardian-standards-eyebrow">보호자에게 필요한 선택 기준</span><h3 id="guardian-standards-heading">돌봄지음 점검기준 · 9개 영역 / 32개 질문</h3><p>시설 환경·방치 예방·존중과 인권·정서적 돌봄까지, 기관에 연락하기 전에 어떤 사실을 확인해야 하는지 살펴보세요. 로그인 없이 이용할 수 있습니다.</p></div>
+    <button type="button" class="btn guardian-standards-btn" data-go="standards">점검기준 자세히 보기 →</button>
+  </section>
   <div class="section-head"><div><h3>누구를 위한 서비스인가요?</h3><p>보호자에게는 비교 정보, 기관에는 지역 홍보 기회, 관리자에게는 운영 도구</p></div></div>
   <div class="portal-grid"><article class="portal-card portal-guardian"><span class="portal-icon">♡</span><div class="portal-overline">FAMILIES</div><h3>보호자</h3><p>광주·전남·전북에서 계약이 유효한 홍보 참여기관을 지역과 유형으로 찾아봅니다.</p><button class="btn btn-primary" data-go="match">참여기관 검색 →</button></article>
-  <article class="portal-card portal-institution"><span class="portal-icon">▣</span><div class="portal-overline">CARE PROVIDERS</div><h3>요양기관</h3><p>승인된 기관 담당자는 로그인 후 홍보 정원과 계약 정보를 확인하고, 소개글·사진 변경을 신청할 수 있습니다.</p><button class="btn btn-outline" data-go="facility">기관 전용 로그인 →</button></article>
+  <article class="portal-card portal-institution"><span class="portal-icon">▣</span><div class="portal-overline">CARE PROVIDERS</div><h3>요양기관</h3><p>승인된 기관 담당자는 로그인 후 홍보 정원과 계약 정보를 확인하고, 소개글·사진 변경을 신청할 수 있습니다.</p><button class="btn btn-outline" id="institution-entry" data-go="facility">기관 전용 로그인 →</button></article>
   <article class="portal-card portal-operator"><span class="portal-icon">✦</span><div class="portal-overline">OPERATIONS</div><h3>관리자</h3><p>비공개 기관 후보 DB, 기관 계정, 콘텐츠 승인, 입금 확인, 계약 기간과 홍보 정원을 통합 관리합니다.</p><button class="btn btn-outline" data-go="admin">관리자 화면 →</button></article></div>
   <div class="section-head"><div><h3>기관 선택 전 세 가지 확인</h3></div></div><div class="grid3"><div class="panel"><span class="pill">01</span><h3>필요한 서비스</h3><p>요양병원은 의료기관, 요양원·주야간보호·재가서비스는 별도의 장기요양 체계입니다.</p></div><div class="panel"><span class="pill">02</span><h3>실제 부담비용</h3><p>건강보험·장기요양보험 적용과 비급여·추가 비용을 기관별로 확인하세요.</p></div><div class="panel"><span class="pill">03</span><h3>직접 확인</h3><p>정원·입소 가능 여부·면회·인력·안전 대응은 상담과 현장 확인이 필요합니다.</p></div></div></section>
 
@@ -60,7 +65,20 @@
   <div class="callout warn" style="margin-top:18px">정원 안에서 유료 참여기관을 제한하지만, 조회·노출 횟수나 실제 입소·이용 전환을 보장하지 않습니다. 가격과 구체적인 노출 위치는 계약서에 명시합니다.</div></section>
 
   <section class="page" id="page-facility"><div class="intro"><div class="kicker">PROVIDER PORTAL</div><h2 class="heading">우리 기관 소개를 <strong>직접 관리</strong></h2><p class="lead">카카오 로그인 후 관리자가 해당 계정에 기관 ID를 연결하거나, 관리자가 발급한 이메일 계정으로 로그인하세요. 변경사항은 승인 전에는 게시되지 않습니다.</p></div>
-  <div id="facility-gate" class="callout warn">기관 권한을 가진 계정으로 로그인해야 합니다. <button class="btn btn-outline btn-sm" data-login="facility">로그인하기</button></div><div id="facility-portal" hidden>
+  <div class="panel admin-facility-preview" id="admin-facility-preview" hidden>
+    <span class="pill">관리자용 · 읽기 전용</span>
+    <h3>기관 담당자 화면 미리보기</h3>
+    <p>실제 기관 담당자가 사용하는 기능 구성은 아래와 같습니다. 관리자는 기관 담당자 계정으로 대신 로그인하거나 신청서를 제출하지 않습니다.</p>
+    <div class="preview-feature-grid">
+      <div><strong>기관 기본정보</strong><small>기관명·주소·기관 유형 확인</small></div>
+      <div><strong>홍보 성과</strong><small>내 기관 상세조회·전화 클릭</small></div>
+      <div><strong>홍보 상품</strong><small>본인 기관 요금·신청내역</small></div>
+      <div><strong>돌봄 자체점검</strong><small>6개월 자체점검·개선계획 제출</small></div>
+    </div>
+    <div id="admin-facility-preview-details">선택된 기관이 없습니다.</div>
+    <div class="flex" style="margin-top:16px"><button class="btn btn-primary" type="button" data-go="admin">전체 기관·계약 관리로 이동 →</button><button class="btn btn-outline" type="button" data-go="standards">보호자 점검기준 보기</button></div>
+  </div>
+  <div id="facility-gate" class="callout warn">기관 권한을 가진 계정으로 로그인해야 합니다. <button class="btn btn-outline btn-sm" data-login="facility">로그인하기</button></div><div id="facility-portal" hidden><div class="facility-shortcut"><button class="btn btn-outline" type="button" data-go="plans">내 기관 홍보 요금·지역 정원 확인 →</button></div>
   <div class="stats-grid"><div class="stat-card"><span>내 기관 ID</span><strong id="mine-id">-</strong></div><div class="stat-card"><span>게시 승인</span><strong id="mine-approval">-</strong></div><div class="stat-card"><span>홍보 계약</span><strong id="mine-contract">-</strong></div></div>
   <section class="panel analytics-panel" id="facility-analytics-panel" aria-label="우리 기관 홍보 성과">
     <div class="facility-row"><div><span class="pill">기관 로그인 전용 · 홍보 성과</span><h3>우리 기관 홍보 성과</h3><p>전체 돌봄지음 방문과 우리 기관의 관심 흐름을 확인하세요. 집계는 2026년 업데이트 배포 이후부터 시작됩니다.</p></div><button class="btn btn-outline btn-sm" id="f-analytics-refresh" type="button">성과 새로고침</button></div>
@@ -127,8 +145,8 @@
   </div></section>
 
   <section class="page" id="page-criteria" data-private-only="admin"><div class="intro"><div class="kicker">DOLBOM JIEUM INTERNAL STANDARD</div><h2 class="heading">돌봄지음 <strong>입점심사 운영기준</strong></h2><p class="lead">입점심사 실무대장 v1.1은 요양병원(심평원 1~5등급)과 요양원(공단 장기요양기관 평가)을 분리하여 사용합니다. 유료 계약과 자체 점검은 공적 인증이 아닙니다.</p></div><div class="callout warn">객관적 사실·현장 관찰·기관 설명·보호자 인상을 구분하세요. 안전·인권 문제가 의심되면 심층검토·게시보류를 검토하며, 자체 점검만으로 추천·우수 인증을 표시하지 마세요.</div><div class="panel" style="margin-top:16px"><h3>입점심사 실무 흐름 (관리자 내부용)</h3><p>① 기관유형·인허가·공식평가 확인 → ② 현장점검 및 비식별 증빙 수집 → ③ 인권·안전 위험 검토 → ④ 보완 요청/확인 → ⑤ 별도의 홍보계약·게시 승인</p><p class="smallprint">요양병원은 심평원 1~5등급, 요양원은 공단 장기요양기관 평가를 확인합니다. 미평가·등급제외·행정처분은 맥락을 확인하며 한 항목만으로 자동 판정하지 않습니다.</p><div class="callout warn">의학적 적합성·시설 우수성에 대한 인증이 아니며, 상업적 광고와 자체 점검 결과는 구분합니다. 실제 심사 결과의 증빙은 내부 점검대장에 기록합니다.</div></div><div id="criteria-list" class="grid2" style="margin-top:18px"></div></section>
- </div><div class="footer">© 돌봄지음 호남 · 유료 홍보 참여기관 안내 · 의료적 진단 또는 기관의 공적 품질 인증 서비스가 아닙니다. · <a href="/운영안내.html">광고·운영 안내</a></div></main></div>
-<div class="mobile-nav" aria-label="주요 메뉴"><button data-page="home" class="active"><span>⌂</span>홈</button><button data-page="match"><span>▦</span>검색</button><button data-page="standards"><span>✓</span>점검기준</button><button data-page="plans" data-restricted="plan" hidden><span>₩</span>홍보료</button><button data-page="facility"><span>▣</span>기관</button><button data-page="admin"><span>⚙</span>관리</button></div>
+ </div><div class="footer">© 돌봄지음 호남 · 유료 홍보 참여기관 안내 · 의료적 진단 또는 기관의 공적 품질 인증 서비스가 아닙니다. · v2.8.2 · <a href="/운영안내.html">광고·운영 안내</a></div></main></div>
+<div class="mobile-nav" aria-label="주요 메뉴"><button data-page="home" class="active"><span>⌂</span>홈</button><button data-page="match"><span>▦</span>검색</button><button data-page="standards"><span>✓</span>점검기준</button><button data-page="facility"><span>▣</span>기관</button><button data-page="admin"><span>⚙</span>관리</button></div>
 <dialog id="auth-dialog" class="auth-dialog" aria-labelledby="auth-title"><div class="facility-row"><h2 id="auth-title">돌봄지음 호남 로그인</h2><button id="auth-close" class="btn btn-outline btn-sm" type="button">닫기 ✕</button></div>
 <p>카카오는 처음 로그인 시 일반 사용자 권한으로 시작합니다. 기관·관리자 권한은 운영자가 별도로 승인합니다.</p>
 <button class="kakao-btn" type="button" id="kakao-login"><span>●</span> 카카오로 시작하기</button><div class="or">또는 기관·관리자 이메일 계정</div>

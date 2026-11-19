@@ -1,0 +1,8 @@
+1. 기존 운영 사이트에서 관리자 기관 DB CSV 백업.
+2. GitHub에서 dolbom-v25-test 시험 브랜치인지 확인.
+3. ZIP을 압축 풀고 site, netlify, firebase, tests, scripts 폴더 등 내용을 루트에 업로드. 00_*.txt 등 문서도 업로드 가능.
+4. Commit directly to dolbom-v25-test. 운영용 careindex-v2에는 업로드 금지.
+5. Netlify careindex-honam → Deploys → Branch deploy dolbom-v25-test 성공 확인.
+6. PC/휴대폰 테스트: 메인 점검기준 바로가기 → 지역 전남→시군구 22곳 → 관리자 기관 메뉴 → 관리 메뉴 복귀.
+7. 휴대폰에서 옛 화면이면 새 탭으로 시험 주소 열기, 새로고침. 변경 버전은 app.js? v284-20261120으로 호출.
+8. 검증 후 운영 브랜치로 옮길지 별도 결정.
