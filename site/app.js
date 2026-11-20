@@ -222,9 +222,18 @@ try{
 // Firebase의 비공개 후보·연락처·관리자 메모는 직접 제공하지 않습니다.
 let basicDirectory=null,basicDirectoryError='',basicPage=0;
 const BASIC_PAGE_SIZE=24;
+// 공백 없는 기관명('나주고운정요양원')과 자연어 입력('고운정 요양원', '나주 요양원')을 함께 지원.
+function matchesDirectoryKeyword(f,keyword){
+  const q=String(keyword||'').trim().toLocaleLowerCase('ko');
+  if(!q)return true;
+  const haystack=[f.name,f.region,f.district,f.type].join(' ').toLocaleLowerCase('ko');
+  const compact=haystack.replace(/\s+/g,'');
+  if(compact.includes(q.replace(/\s+/g,'')))return true;
+  return q.split(/\s+/).every(term=>haystack.includes(term)||compact.includes(term));
+}
 const matchedBasicDirectory=()=>{
-  const region=formValue('match-region'),district=formValue('match-district'),type=formValue('match-type'),kw=formValue('match-keyword').toLocaleLowerCase('ko');
-  return (basicDirectory||[]).filter(f=>(region==='전체'||f.region===region)&&(district==='전체'||f.district===district)&&(type==='전체'||f.type===type)&&(!kw||f.name.toLocaleLowerCase('ko').includes(kw)||f.district.toLocaleLowerCase('ko').includes(kw)));
+  const region=formValue('match-region'),district=formValue('match-district'),type=formValue('match-type'),kw=formValue('match-keyword');
+  return (basicDirectory||[]).filter(f=>(region==='전체'||f.region===region)&&(district==='전체'||f.district===district)&&(type==='전체'||f.type===type)&&matchesDirectoryKeyword(f,kw));
 };
 async function ensureBasicDirectory(){
   if(basicDirectory||basicDirectoryError)return;
@@ -487,8 +496,23 @@ async function loadAdmin(reset=true){if(session.role!=='admin')return;
     renderAdmin();
     if(reset)await refreshRequests();
   }catch(e){if(requestId===adminSearchRequestId){
-    setMessage('a-search-notice','기관 검색 실패: '+e.message);
-    setMessage('a-facilities','검색 서버 오류가 발생했습니다. 조건을 확인한 뒤 다시 검색해 주세요.');
+    setMessage('a-search-notice','관리자 DB 검색 오류: '+e.message+' · 아래에는 공개 기본명단만 참고용으로 표시합니다.');
+    setMessage('a-facilities','관리자 서버 연결을 확인하는 중입니다. 공개 기본명단을 대신 불러옵니다…');
+    $('a-more').hidden=true;
+    // 관리서버가 실패해도 이미 공개가 허용된 '기관명·지역·유형' 참고 목록만 보여줍니다.
+    // 관리자 전용 비공개 원본·기관ID·계약·승인·수납·계정은 로컬 목록으로 대체하지 않습니다.
+    await ensureBasicDirectory();
+    if(requestId!==adminSearchRequestId)return;
+    if(!basicDirectory){
+      setMessage('a-facilities','관리자 서버 검색과 공개 참고명단을 모두 불러오지 못했습니다. Netlify Functions의 api 로그 및 FIREBASE_SERVICE_ACCOUNT_JSON 환경변수를 확인하세요.');
+      return;
+    }
+    const {keyword,region,district,type}=adminSearchState;
+    const matches=basicDirectory.filter(f=>(!region||f.region===region)&&(!district||f.district===district)&&(!type||f.type===type)&&matchesDirectoryKeyword(f,keyword));
+    const rows=matches.slice(0,60);
+    $('a-facilities').innerHTML=`<div class="callout warn"><strong>참고용 기본명단 ${matches.length.toLocaleString('ko-KR')}곳</strong><br>관리자 서버 연결에 실패하여 공공자료의 과거 이름만 표시합니다. 아래 결과는 관리자 DB 조회·계약·수납·승인 결과가 아니며 선택하여 수정할 수 없습니다. 실제 운영 여부도 재확인이 필요합니다.</div>`+
+      (rows.length?rows.map(f=>`<div class="admin-entry"><div><strong>${esc(f.name)}</strong><small>${esc(f.region)} ${esc(f.district)} · ${esc(f.type)} · 기준일 ${esc(f.asOf)}</small></div><span class="pill">참고명단</span></div>`).join(''):'<div class="empty">이 검색어에 해당하는 공개 참고 기관명이 없습니다.</div>')+
+      (matches.length>rows.length?'<p class="hintline">첫 60개만 표시합니다. 검색어 또는 지역을 좁혀 주세요.</p>':'');
   }}
 }
 function renderAdmin(){

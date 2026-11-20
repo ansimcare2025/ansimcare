@@ -8,7 +8,18 @@ export { regions, types, getPrivatePrices, defaultCap, dateOK, todayKST, visible
 export function fail(status,message){const e=new Error(message);e.statusCode=status;throw e;}
 export function txt(x,n=150){return typeof x==='string'?x.trim().slice(0,n):'';}
 export function response(status,body,headers={}) {return {statusCode:status,headers:{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store, max-age=0','X-Content-Type-Options':'nosniff',...headers},body:JSON.stringify(body)};}
-export function wrapError(e){const status=e.statusCode||500;if(status>=500)console.error('CareIndex error:',e.code||e.name||'server_error');return response(status,{ok:false,error:status>=500?'서버 연결/설정에 문제가 있습니다. 관리자에게 문의해 주세요.':e.message});}
+export function wrapError(e){
+  const status=e.statusCode||500;
+  if(status>=500){
+    // 문제의 유형만 기록합니다. 자격증명 JSON/토큰/개인정보는 로그에 남기지 않습니다.
+    const marker= /FIREBASE_SERVICE_ACCOUNT_JSON 미설정/.test(e.message)?'firebase-credentials-missing':
+      /서비스 계정 JSON 형식 오류/.test(e.message)?'firebase-credentials-malformed':
+      /허용된 Firebase 프로젝트가 아닙니다/.test(e.message)?'firebase-project-mismatch':
+      String(e.code||e.name||'server_error').replace(/[^a-zA-Z0-9._-]/g,'').slice(0,70);
+    console.error('CareIndex error:',marker,'status:',status);
+  }
+  return response(status,{ok:false,error:status>=500?'서버 연결/설정에 문제가 있습니다. 관리자에게 문의해 주세요.':e.message});
+}
 export function services(){
   if(!getApps().length){
     const raw=process.env.FIREBASE_SERVICE_ACCOUNT_JSON;

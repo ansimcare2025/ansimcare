@@ -12,8 +12,14 @@ export function adminMatchesFacility(f,{query='',region='',district='',type=''})
   if(district&&f.district!==district)return false;
   if(type&&f.type!==type)return false;
   if(!query)return true;
-  return [f.id,f.name,f.officialId,f.region,f.district,f.type,f.address,f.phone,f.source]
-   .map(x=>String(x??'')).join(' ').toLocaleLowerCase('ko').includes(query);
+  // '고운정 요양원' -> '나주고운정요양원', '나주 요양원' -> 나주시의 요양원.
+  // 공백을 제거한 연속명칭과, 분리된 검색어가 각각 포함되는 경우를 모두 지원합니다.
+  const q=String(query).toLocaleLowerCase('ko').trim();
+  const haystack=[f.id,f.name,f.officialId,f.region,f.district,f.type,f.address,f.phone,f.source]
+   .map(x=>String(x??'')).join(' ').toLocaleLowerCase('ko');
+  const compact=haystack.replace(/\s+/g,'');
+  if(compact.includes(q.replace(/\s+/g,'')))return true;
+  return q.split(/\s+/).every(term=>haystack.includes(term)||compact.includes(term));
 }
 // 반환한 마지막 문서 ID를 다음 커서로 사용하므로 검색 중 결과가 빠지지 않습니다.
 export function adminPageResult({items,after,scanned,limitReached,exhausted}){

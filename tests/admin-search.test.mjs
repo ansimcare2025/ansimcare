@@ -18,3 +18,11 @@ test('page sizes validated and scanning cursor retained',()=>{
   assert.equal(page.next,'IMP-A1');
   assert.equal(adminPageResult({items:[],after:'IMP-A1',scanned:200,limitReached:false,exhausted:true}).next,'');
 });
+
+test('admin search accepts natural spacing and region/type tokens',()=>{
+  const n={name:'나주고운정요양원',region:'전남',district:'나주시',type:'요양원'};
+  for(const q of ['고운정 요양원','나주 요양원','나주고운정요양원','고운정  요양원'])
+    assert(adminMatchesFacility(n,{query:q}),q);
+  assert(!adminMatchesFacility(n,{query:'나주 요양병원'}));
+  assert(!adminMatchesFacility(n,{query:'순천 요양원'}));
+});
