@@ -32,7 +32,15 @@ export async function handler(event){
     const form=new URLSearchParams({grant_type:'authorization_code',client_id:key,redirect_uri:redirect,code});
     if(process.env.KAKAO_CLIENT_SECRET)form.set('client_secret',process.env.KAKAO_CLIENT_SECRET);
     const tokenRes=await fetch('https://kauth.kakao.com/oauth/token',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:form,signal:AbortSignal.timeout(10000)});
-    if(!tokenRes.ok)throw Error('token-exchange-failed');
+  if (!tokenRes.ok) {
+  const kakaoError = await tokenRes.json().catch(() => ({}));
+  console.error(
+    'kakao token rejected',
+    tokenRes.status,
+    String(kakaoError.error || 'unknown')
+  );
+  throw Error('token-exchange-failed');
+}
     const token=await tokenRes.json();
     const me=await fetch('https://kapi.kakao.com/v2/user/me',{headers:{Authorization:'Bearer '+token.access_token},signal:AbortSignal.timeout(10000)});
     if(!me.ok)throw Error('user-info-failed');
