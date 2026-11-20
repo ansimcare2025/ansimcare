@@ -664,7 +664,7 @@ const trackingCollection=s=>s.db.collection('dj_analytics_daily');
 const trackingDedup=s=>s.db.collection('dj_analytics_dedup');
 async function recordPublicVisit(s,event,body){
   // 시험 브랜치는 운영 데이터베이스에 기록을 남기지 않습니다.
-  if(process.env.CONTEXT!=='production')return {counted:false,testMode:true,note:'시험 배포에서는 방문 성과를 집계하지 않습니다.'};
+  if(process.env.CI_DEPLOY_KIND==='auth-test' || process.env.CONTEXT!=='production')return {counted:false,testMode:true,note:'시험 배포에서는 방문 성과를 집계하지 않습니다.'};
   const origin=event.headers?.origin||event.headers?.Origin||'';
   const host=event.headers?.host||event.headers?.Host||'';
   if(origin&&(!host||new URL(origin).host!==host))fail(403,'다른 사이트의 기록 요청을 허용하지 않습니다.');
@@ -710,7 +710,12 @@ export async function handler(event){
     // Netlify branch-deploy는 운영 DB와 환경변수를 공유할 수 있으므로 반드시 읽기 전용.
     // 관리자/기관이라고 해도 지점별 자료수정·입금확인·신청등록을 시험 주소에서는 차단합니다.
     const stagingReadActions=new Set(['my_account','my_facility','private_quota','private_plan_prices','requests','my_assessment_state','admin_field_state','admin_pending_assessments','admin_list','admin_quotas','facility_order_quote','facility_my_orders','admin_payment_orders','facility_my_analytics','admin_analytics','admin_overview','admin_facility_detail','my_access_application','admin_access_applications','public_track']);
-    if(process.env.CONTEXT!=='production' && method==='POST' && !stagingReadActions.has(action))fail(403,'시험 배포 사이트는 운영자료 보호를 위해 읽기 전용입니다. 입력 동작은 동봉된 오프라인 미리보기에서 시험하세요.');
+    // Even if this standalone Netlify site has CONTEXT='production', writes remain
+    // disabled until BOTH the isolated test project and explicit test-write opt-in match.
+    const isolatedTest = process.env.CI_DEPLOY_KIND==='auth-test' && process.env.CI_FIREBASE_PROJECT_ID==='dolbomjieum-test';
+    const allowTestWrites = isolatedTest && process.env.CI_TEST_WRITES==='enabled' && process.env.CONTEXT==='production';
+    if(method==='POST' && !stagingReadActions.has(action) && !allowTestWrites)
+      fail(403,'시험용 쓰기 기능은 독립 사이트/시험 Firebase 연결을 확인한 후 활성화할 수 있습니다.');
     const s=services();
     if(method==='GET'&&action==='public_list')return response(200,{ok:true,items:await listPublic(s,body)});
     if(method==='GET'&&action==='public_assessment')return response(200,{ok:true,...await publicAssessment(s,body)});

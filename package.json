@@ -1,6 +1,6 @@
 {
   "name": "dolbomjieum-honam",
-  "version": "2.9.3",
+  "version": "2.9.3-auth-test",
   "private": true,
   "type": "module",
   "engines": {

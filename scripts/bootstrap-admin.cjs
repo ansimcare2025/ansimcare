@@ -4,7 +4,7 @@ const {getAuth}=require('firebase-admin/auth');
 (async()=>{
  const uid=process.env.ADMIN_UID,raw=process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
  if(!uid||!raw)throw Error('ADMIN_UID and FIREBASE_SERVICE_ACCOUNT_JSON required');
- const key=JSON.parse(raw);if(key.project_id!=='ansimcare-9bae3')throw Error('Wrong Firebase project');
+ const key=JSON.parse(raw);if(key.project_id!=='dolbomjieum-test')throw Error('Wrong Firebase test project');
  initializeApp({credential:cert(key)});const auth=getAuth(),u=await auth.getUser(uid);
  if(u.email && !u.emailVerified)throw Error('Email manager must verify their address first.');
  if(!u.email && !u.uid.startsWith('kakao:'))throw Error('Unexpected admin identity');

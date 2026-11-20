@@ -17,6 +17,7 @@ export async function handler(event){
   const headers={'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store','Referrer-Policy':'no-referrer','Content-Security-Policy':"default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'",'Set-Cookie':clear};
   const fail=(message)=>({statusCode:400,headers,body:`<!doctype html><meta charset="utf-8"><title>로그인 오류</title><p>${message}</p><a href="/">홈으로 돌아가기</a>`});
   if(event.httpMethod!=='GET')return fail('허용되지 않는 요청입니다.');
+  if(process.env.CI_DEPLOY_KIND!=='auth-test' || process.env.CI_FIREBASE_PROJECT_ID!=='dolbomjieum-test')return fail('시험용 Firebase 연결 설정이 필요합니다.');
   const cookie=(event.headers?.cookie||event.headers?.Cookie||'').split(';').map(s=>s.trim()).find(s=>s.startsWith('__Host-ci-oauth='));
   const value=cookie?.split('=')[1]||'';const [expected,mode]=value.split('.');
   const state=event.queryStringParameters?.state||'';

@@ -22,11 +22,15 @@ export function wrapError(e){
   return response(status,{ok:false,error:status>=500?'서버 연결/설정에 문제가 있습니다. 관리자에게 문의해 주세요.':e.message});
 }
 export function services(){
+  // The auth-test code is intentionally fail-closed on shared / production Netlify.
+  // This package must only run in a separate Netlify site with isolated test credentials.
+  if(process.env.CI_DEPLOY_KIND!=='auth-test' || process.env.CI_FIREBASE_PROJECT_ID!=='dolbomjieum-test')
+    fail(503,'독립 시험 사이트 환경설정이 필요합니다.');
   if(!getApps().length){
     const raw=process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
     if(!raw)fail(503,'FIREBASE_SERVICE_ACCOUNT_JSON 미설정');
     let parsed;try{parsed=JSON.parse(raw);}catch{fail(503,'서비스 계정 JSON 형식 오류');}
-    if(parsed.project_id!=='ansimcare-9bae3')fail(503,'허용된 Firebase 프로젝트가 아닙니다.');
+    if(parsed.project_id!==process.env.CI_FIREBASE_PROJECT_ID || parsed.project_id!=='dolbomjieum-test')fail(503,'허용된 Firebase 프로젝트가 아닙니다.');
     initializeApp({credential:cert(parsed),projectId:parsed.project_id});
   }
   return {auth:getAuth(),db:getFirestore(),FieldValue};

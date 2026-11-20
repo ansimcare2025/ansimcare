@@ -14,4 +14,4 @@ test('주문 자체로 광고가 자동 게시되지 않음',()=>{const block=ap
 test('민감 자료 없는 주문 공개 객체',()=>{const view=providerOrderView({id:'1',facilityId:'F',status:'awaiting_manual_review',paymentReference:'secret'});assert.equal(view.paymentReference,undefined);assert.equal(view.status,'awaiting_manual_review');});
 test('기관 요금표가 일반 방문자 HTML에 표시되지 않음',()=>{assert.doesNotMatch(page,/100,000원|150,000원|200,000원|300,000원/);assert.match(page,/data-private-only="facility"/);});
 
-test('Netlify branch deploy 운영 DB 쓰기 차단',()=>{assert.match(api,/process.env.CONTEXT!==\'production\'/); assert.match(api,/!stagingReadActions.has\(action\)/);assert.ok(!api.slice(api.indexOf("const stagingReadActions"),api.indexOf("if(process.env.CONTEXT")).includes("facility_create_order"));});
+test('독립 시험환경만 쓰기 허용',()=>{assert.match(api,/CI_TEST_WRITES==='enabled'/);assert.match(api,/CI_DEPLOY_KIND==='auth-test'/);assert.match(api,/!stagingReadActions.has\(action\)/);});

@@ -3,6 +3,7 @@ import { response } from './_shared/core.mjs';
 import {resolveKakaoRedirect} from './_shared/kakao-origin.mjs';
 export async function handler(event){
   if(event.httpMethod!=='GET')return response(405,{ok:false,error:'GET only'});
+  if(process.env.CI_DEPLOY_KIND!=='auth-test' || process.env.CI_FIREBASE_PROJECT_ID!=='dolbomjieum-test')return response(503,{ok:false,error:'시험용 Firebase 연결 설정을 먼저 완료해 주세요.'});
   const key=process.env.KAKAO_REST_API_KEY,redirect=process.env.KAKAO_REDIRECT_URI;
   if(!key||!redirect)return response(503,{ok:false,error:'카카오 로그인 키/리다이렉트 설정이 아직 완료되지 않았습니다.'});
   try{
