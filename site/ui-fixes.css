@@ -31,3 +31,13 @@
  .mobile-nav button.active[data-page="standards"]{background:#e1f4e7;color:#0f5037}
 }
 @media(max-width:360px){.mobile-nav{column-gap:0;padding-left:2px!important;padding-right:2px!important}.mobile-nav button:not([hidden]){font-size:9px;letter-spacing:-.65px}.preview-feature-grid{grid-template-columns:1fr}}
+
+/* v2.9.3 institution-provided information / operator approval */
+.request-comparison{margin:12px 0;padding:12px;background:#f7f9f7;border:1px solid #dce6db;border-radius:10px}
+.request-comparison summary{cursor:pointer;font-weight:700;color:#214b36}
+.request-table-wrap{max-width:100%;overflow-x:auto;margin-top:10px}
+.request-diff{border-collapse:collapse;width:100%;font-size:12px;min-width:430px}
+.request-diff th,.request-diff td{border-bottom:1px solid #dce6db;padding:10px 8px;text-align:left;vertical-align:top;overflow-wrap:anywhere;white-space:pre-wrap}
+.request-diff thead th{background:#e7eee8}.request-diff tbody th{white-space:nowrap;width:88px}
+#f-current-summary{line-height:1.7;margin-bottom:12px}
+#f-change-preview{border-left:3px solid #537e62;padding-left:10px;margin:12px 0}

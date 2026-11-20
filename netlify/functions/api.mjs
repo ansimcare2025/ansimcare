@@ -6,6 +6,8 @@ import {validateFieldDraft,publicFieldRows,FIELD_IDS} from './_shared/field-poli
 import {invoiceAmount,normalizeOrderMonths,providerOrderView,ORDER_PENDING,ORDER_PAID,ORDER_CANCELED} from './_shared/payment-policy.mjs';
 import {DOMAINS, SUPPORTED_TYPES, addMonths, checkSelf, checkReview, publicReview, riskReleaseAllowed} from './_shared/assessment-policy.mjs';
 import { services, authUser, requireAdmin, response, wrapError, fail, txt, regions, types, getPrivatePrices, key, defaultCap, dateOK, todayKST, visible, publicFields, normalizedFacility, facilityId, audit, emailOK, ensureLocation, ensureType } from './_shared/core.mjs';
+import {belongsToFacility,cleanAccessApplication} from './_shared/access-policy.mjs';
+import {PROFILE_FIELDS, proposeProfileChanges, reviewProfileChanges} from './_shared/profile-policy.mjs';
 const sRef=(s,id)=>s.db.collection('ci_facilities').doc(id);
 const empty={publicationStatus:'pending',advertisingStatus:'pending',paymentStatus:'unconfirmed',contractStart:'',contractEnd:'',managerUids:[],lastConfirmedAt:'',createdAt:null};
 const sortTime=(f)=>f.createdAt?.toMillis?.()||0;
@@ -149,6 +151,7 @@ async function importPrivate(s,u,b){requireAdmin(u);
   return {created,updated,errors:errors.slice(0,25)};
 }
 async function linkUser(s,u,b){requireAdmin(u);
+  if(b.verified!==true||txt(b.verificationNote,250).length<8)fail(400,'담당자 소속 및 위임 권한을 별도로 확인한 근거가 필요합니다.');
   const id=txt(b.facilityId,90),uid=txt(b.uid,140);
   if(!id||!uid)fail(400,'기관 ID와 연결할 Firebase 사용자 UID가 필요합니다.');
   const f=await readFacility(s,id);
@@ -158,9 +161,10 @@ async function linkUser(s,u,b){requireAdmin(u);
   if(oldClaims.role==='facility'&&oldClaims.facilityId&&oldClaims.facilityId!==id)fail(409,'이미 다른 기관에 연결된 계정입니다.');
   await s.auth.setCustomUserClaims(uid,{...oldClaims,role:'facility',facilityId:id});
   await sRef(s,id).update({managerUids:s.FieldValue.arrayUnion(uid),updatedAt:s.FieldValue.serverTimestamp()});
-  await audit(s,u.uid,'link_manager',id,{uid});return {facilityId:id,uid};
+  await audit(s,u.uid,'link_manager',id,{uid,verificationMethod:txt(b.verificationNote,250)});return {facilityId:id,uid};
 }
 async function issueEmail(s,u,b){requireAdmin(u);
+  if(b.verified!==true||txt(b.verificationNote,250).length<8)fail(400,'담당자 소속 및 위임 권한을 별도로 확인한 근거가 필요합니다.');
   const id=txt(b.facilityId,90),email=txt(b.email,250).toLowerCase();
   if(!emailOK(email))fail(400,'올바른 담당자 이메일이 필요합니다.');
   const f=await readFacility(s,id);
@@ -169,23 +173,141 @@ async function issueEmail(s,u,b){requireAdmin(u);
   try{user=await s.auth.createUser({email,password,displayName:f.name,disabled:false});
     await s.auth.setCustomUserClaims(user.uid,{role:'facility',facilityId:id});
     await sRef(s,id).update({managerUids:s.FieldValue.arrayUnion(user.uid),updatedAt:s.FieldValue.serverTimestamp()});
-    await audit(s,u.uid,'issue_email_account',id,{uid:user.uid});
+    await audit(s,u.uid,'issue_email_account',id,{uid:user.uid,verificationMethod:txt(b.verificationNote,250)});
     return {uid:user.uid,email,temporaryPassword:password,notice:'한 번만 표시되는 임시 비밀번호입니다. 안전하게 전달해 주세요.'};
   }catch(e){if(user)await s.auth.deleteUser(user.uid).catch(()=>{});if(e.code==='auth/email-already-exists')fail(409,'이메일 계정이 이미 존재합니다. 카카오 UID 연결 또는 기존 계정 연결을 이용하세요.');throw e;}
 }
+// 기관 계정 등록과 광고/게시 승인은 별개입니다. 가입 신청 자체에는 관리자 권한을 부여하지 않습니다.
+const accessCollection=s=>s.db.collection('ci_access_applications');
+const accessView=(id,v)=>({uid:id,status:v.status||'pending',facilityName:v.facilityName||'',
+  applicantName:v.applicantName||'',region:v.region||'',district:v.district||'',type:v.type||'',
+  contactPhone:v.contactPhone||'',approvedFacilityId:v.approvedFacilityId||'',
+  submittedAt:v.submittedAt?.toDate?.()?.toISOString?.()||'',
+  reviewedAt:v.reviewedAt?.toDate?.()?.toISOString?.()||'',reason:v.reason||''});
+async function myAccessApplication(s,u){
+  const row=await accessCollection(s).doc(u.uid).get();
+  return {application:row.exists?accessView(u.uid,row.data()):null};
+}
+async function applyForFacilityAccess(s,u,b){
+  if(u.role==='admin'||u.role==='facility')fail(403,'기존 관리자·기관 담당자는 신규 기관 권한 신청을 할 수 없습니다.');
+  let clean;
+  try{clean=cleanAccessApplication(b,{regions,types});}catch(e){fail(400,e.message);}
+  const ref=accessCollection(s).doc(u.uid);
+  await s.db.runTransaction(async tx=>{
+    const old=await tx.get(ref);
+    if(old.exists&&['pending','approved'].includes(old.get('status')))fail(409,'이미 접수되었거나 승인된 신청이 있습니다.');
+    tx.set(ref,{...clean,status:'pending',applicantUid:u.uid,provider:u.firebase?.sign_in_provider||'firebase',
+      submittedAt:s.FieldValue.serverTimestamp(),reviewedAt:null,approvedFacilityId:'',reason:''});
+  });
+  await audit(s,u.uid,'facility_access_requested',null,{region:clean.region,district:clean.district,type:clean.type});
+  return {status:'pending',notice:'기관 담당자 접수 완료. 관리자 확인 전에는 기관 화면에 접근할 수 없습니다.'};
+}
+async function listAccessApplications(s,u){
+  requireAdmin(u);
+  const snap=await accessCollection(s).where('status','==','pending').limit(100).get();
+  return {items:snap.docs.map(d=>accessView(d.id,d.data())).sort((x,y)=>
+    (x.status==='pending'?0:1)-(y.status==='pending'?0:1)||String(y.submittedAt).localeCompare(x.submittedAt))};
+}
+async function reviewAccessApplication(s,u,b){
+  requireAdmin(u);
+  const applicantUid=txt(b.applicantUid,140),decision=txt(b.decision,20),reason=txt(b.reason,300),id=txt(b.facilityId,90);
+  if(!applicantUid||!['approved','rejected'].includes(decision))fail(400,'신청자와 처리결과를 확인하세요.');
+  if(decision==='approved'&&(b.verified!==true||reason.length<8))fail(400,'기관 대표번호 등 독립 경로로 소속·권한을 확인한 후 확인방법과 근거를 입력하세요.');
+  if(decision==='rejected'&&reason.length<4)fail(400,'반려 사유를 입력하세요.');
+  const ref=accessCollection(s).doc(applicantUid);
+  const initial=await ref.get();if(!initial.exists||initial.get('status')!=='pending')fail(409,'승인 대기 중인 신청이 아닙니다.');
+  const app=initial.data();
+  if(decision==='rejected'){
+    await s.db.runTransaction(async tx=>{
+      const cur=await tx.get(ref);if(!cur.exists||cur.get('status')!=='pending')fail(409,'이미 처리된 신청입니다.');
+      tx.update(ref,{status:'rejected',reason,reviewedBy:u.uid,reviewedAt:s.FieldValue.serverTimestamp()});
+    });
+    await audit(s,u.uid,'facility_access_rejected',null,{applicantUid});return {status:'rejected'};
+  }
+  if(!id)fail(400,'승인할 실제 등록 기관을 선택하세요.');
+  const f=await readFacility(s,id);
+  if(f.region!==app.region||f.district!==app.district||f.type!==app.type)fail(409,'신청 지역·유형과 승인 기관이 다릅니다. 정확한 기관을 선택하세요.');
+  if(applicantUid===u.uid)fail(403,'관리자 본인의 기관 권한 신청은 승인할 수 없습니다.');
+  let person;try{person=await s.auth.getUser(applicantUid);}catch{fail(404,'신청자의 로그인 계정이 존재하지 않습니다.');}
+  if(person.disabled)fail(403,'비활성화된 로그인 계정입니다.');
+  const oldClaims=person.customClaims||{};
+  if(oldClaims.role==='admin'||oldClaims.role==='facility'&&oldClaims.facilityId&&oldClaims.facilityId!==id)fail(409,'이미 다른 권한을 가진 계정입니다.');
+  // Claim first, roster second: backend checks both claim and roster on every request.
+  await s.auth.setCustomUserClaims(applicantUid,{...oldClaims,role:'facility',facilityId:id});
+  try{
+    await s.db.runTransaction(async tx=>{
+      const [current,fac]=await Promise.all([tx.get(ref),tx.get(sRef(s,id))]);
+      if(!current.exists||current.get('status')!=='pending'||!fac.exists)fail(409,'다른 관리자가 이미 처리한 신청입니다.');
+      tx.update(sRef(s,id),{managerUids:s.FieldValue.arrayUnion(applicantUid),updatedAt:s.FieldValue.serverTimestamp()});
+      tx.update(ref,{status:'approved',approvedFacilityId:id,reason,reviewedBy:u.uid,reviewedAt:s.FieldValue.serverTimestamp()});
+    });
+  }catch(e){await s.auth.setCustomUserClaims(applicantUid,oldClaims).catch(()=>{});throw e;}
+  await audit(s,u.uid,'facility_access_approved',id,{applicantUid});
+  return {status:'approved',facilityId:id,notice:'계정 접속만 승인했습니다. 기관정보 게시·계약은 별도로 승인해야 합니다.'};
+}
+async function revokeFacilityAccess(s,u,b){
+  requireAdmin(u);
+  const uid=txt(b.uid,140),id=txt(b.facilityId,90);if(!uid||!id)fail(400,'기관 ID와 담당자 UID가 필요합니다.');
+  const f=await readFacility(s,id);
+  if(!(f.managerUids||[]).includes(uid))fail(404,'이 기관에 연결된 담당자가 아닙니다.');
+  const person=await s.auth.getUser(uid),claims=person.customClaims||{};
+  if(claims.role==='admin'||(claims.facilityId&&claims.facilityId!==id))fail(403,'다른 역할·기관 계정을 이 화면에서 해제할 수 없습니다.');
+  await sRef(s,id).update({managerUids:s.FieldValue.arrayRemove(uid),updatedAt:s.FieldValue.serverTimestamp()});
+  const {role,facilityId,...rest}=claims;
+  await s.auth.setCustomUserClaims(uid,rest);
+  await s.auth.revokeRefreshTokens(uid);
+  const appRef=accessCollection(s).doc(uid),app=await appRef.get();
+  if(app.exists&&app.get('approvedFacilityId')===id)await appRef.update({status:'revoked',reason:'관리자 접속권한 해제',reviewedBy:u.uid,reviewedAt:s.FieldValue.serverTimestamp()});
+  await audit(s,u.uid,'facility_access_revoked',id,{uid});return {revoked:true};
+}
+async function ensureRequestRoom(s,facilityId,kind){
+  // 단일 기관이 미처리 요청을 무제한 저장하지 못하게 합니다 (단일 필드 색인만 사용).
+  const snap=await s.db.collection('ci_requests').where('facilityId','==',facilityId).limit(300).get();
+  const pending=snap.docs.filter(doc=>doc.get('status')==='pending'&&doc.get('kind')===kind).length;
+  if(pending>=(kind==='material'?10:5))fail(429,'관리자 검토 대기 요청이 많습니다. 기존 요청이 처리된 뒤 제출하세요.');
+}
 async function submitProfile(s,u,b){
-  if(u.role!=='facility'||!u.facilityId)fail(403,'기관 전용 계정으로 로그인하세요.');
-  const facility=await readFacility(s,u.facilityId);
-  if(!(facility.managerUids||[]).includes(u.uid))fail(403,'해당 기관을 관리할 권한이 없습니다.');
-  const patch=normalizedFacility(b.facility||{});
-  const uploadedPath=txt(b.photoPath,300);
+  const facility=await getMy(s,u);
+  await ensureRequestRoom(s,facility.id,'profile');
+  // 관리자 승인 전에는 기관 기본DB·보호자 공개DB를 수정하지 않습니다.
+  const proposal=normalizedFacility({...facility,...(b.facility||{})});
+  const {changes,baseValues,changedFields}=proposeProfileChanges(facility,proposal);
+  const uploadedPath=txt(b.photoPath,300),referenceNote=txt(b.referenceNote,600);
+  if(!changedFields.length&&!uploadedPath)fail(400,'수정할 항목이나 사진을 선택한 다음 요청하세요.');
   if(uploadedPath){
     if(!uploadedPath.startsWith(`ci_pending/${u.facilityId}/${u.uid}/`))fail(403,'자기 기관 사진만 신청할 수 있습니다.');
     const bucket=getStorage().bucket(process.env.FIREBASE_STORAGE_BUCKET||'ansimcare-9bae3.firebasestorage.app');
     const [exists]=await bucket.file(uploadedPath).exists();if(!exists)fail(404,'업로드한 사진이 없습니다.');
   }
-  const ref=await s.db.collection('ci_requests').add({facilityId:u.facilityId,authorUid:u.uid,kind:'profile',payload:{...patch,photoPath:uploadedPath},status:'pending',createdAt:s.FieldValue.serverTimestamp()});
-  await audit(s,u.uid,'submit_profile',u.facilityId,{requestId:ref.id});return {requestId:ref.id};
+  const ref=await s.db.collection('ci_requests').add({facilityId:u.facilityId,authorUid:u.uid,kind:'profile',
+    schemaVersion:'2.9.3',payload:{...changes,photoPath:uploadedPath},changedFields,baseValues,referenceNote,
+    status:'pending',createdAt:s.FieldValue.serverTimestamp()});
+  await audit(s,u.uid,'submit_profile',u.facilityId,{requestId:ref.id,changedFields});
+  return {requestId:ref.id,changedFields};
+}
+async function submitMaterial(s,u,b){
+  const facility=await getMy(s,u);
+  await ensureRequestRoom(s,facility.id,'material');
+  const title=txt(b.title,90),description=txt(b.description,1200);
+  if(title.length<3||description.length<10)fail(400,'자료 제목 3자 이상, 전달 내용 10자 이상 입력하세요.');
+  const ref=await s.db.collection('ci_requests').add({facilityId:facility.id,authorUid:u.uid,kind:'material',
+    payload:{title,description},status:'pending',createdAt:s.FieldValue.serverTimestamp()});
+  await audit(s,u.uid,'submit_material',facility.id,{requestId:ref.id});
+  return {requestId:ref.id};
+}
+async function reviewMaterial(s,u,b){requireAdmin(u);
+  const id=txt(b.requestId,150),decision=txt(b.decision,25),reason=txt(b.reason,300);
+  if(!['reviewed','rejected'].includes(decision))fail(400,'검토완료 또는 보완요청을 선택하세요.');
+  if(reason.length<4)fail(400,'처리 메모를 4자 이상 입력하세요.');
+  const ref=s.db.collection('ci_requests').doc(id);
+  const outcome=await s.db.runTransaction(async tx=>{
+    const row=await tx.get(ref);
+    if(!row.exists||row.get('status')!=='pending'||row.get('kind')!=='material')fail(409,'미처리 자료 제출 건이 아닙니다.');
+    tx.update(ref,{status:decision,reason,reviewedBy:u.uid,reviewedAt:s.FieldValue.serverTimestamp()});
+    return {facilityId:row.get('facilityId')};
+  });
+  await audit(s,u.uid,'review_material',outcome.facilityId,{requestId:id,decision});
+  return {requestId:id,status:decision,notice:'전달자료 처리 상태만 변경했습니다. 기관 공개정보는 변경되지 않았습니다.'};
 }
 async function listRequests(s,u){
   const col=s.db.collection('ci_requests');
@@ -215,33 +337,53 @@ async function uploadPhoto(s,u,b){
 }
 async function reviewProfile(s,u,b){requireAdmin(u);
   const id=txt(b.requestId,150),decision=txt(b.decision,25),reason=txt(b.reason,300);
+  const verificationNote=txt(b.verificationNote,500);
   if(!['approved','rejected'].includes(decision))fail(400,'승인 또는 반려를 선택하세요.');
+  if(decision==='approved'&&(b.verified!==true||verificationNote.length<10))fail(400,'실제 자료 확인 후 검증근거와 확인일을 10자 이상 입력하세요.');
+  if(decision==='rejected'&&reason.length<4)fail(400,'반려·보완 사유를 4자 이상 입력하세요.');
   const ref=s.db.collection('ci_requests').doc(id);
-  const initial=await ref.get();if(!initial.exists)fail(404,'신청을 찾을 수 없습니다.');
-  const row=initial.data();let imageUrl='';
+  const initial=await ref.get();
+  if(!initial.exists||initial.get('status')!=='pending'||initial.get('kind')!=='profile')fail(409,'승인 대기 중인 기관정보 변경 요청이 아닙니다.');
+  const row=initial.data();let imageUrl='',copiedFile=null;
   if(decision==='approved'&&row?.payload?.photoPath){
-    if(!row.payload.photoPath.startsWith(`ci_pending/${row.facilityId}/${row.authorUid}/`))fail(403,'사진 경로를 확인할 수 없습니다.');
+    if(!String(row.payload.photoPath).startsWith(`ci_pending/${row.facilityId}/${row.authorUid}/`))fail(403,'사진 경로를 확인할 수 없습니다.');
     const bucket=getStorage().bucket(process.env.FIREBASE_STORAGE_BUCKET||'ansimcare-9bae3.firebasestorage.app');
     const dest=`ci_public/${row.facilityId}/${randomBytes(10).toString('hex')}.${row.payload.photoPath.split('.').at(-1)}`;
-    const token=randomUUID();
-    await bucket.file(row.payload.photoPath).copy(bucket.file(dest));
-    await bucket.file(dest).setMetadata({metadata:{firebaseStorageDownloadTokens:token},cacheControl:'public,max-age=3600'});
+    const token=randomUUID();copiedFile=bucket.file(dest);
+    await bucket.file(row.payload.photoPath).copy(copiedFile);
+    await copiedFile.setMetadata({metadata:{firebaseStorageDownloadTokens:token},cacheControl:'public,max-age=3600'});
     imageUrl=`https://firebasestorage.googleapis.com/v0/b/${encodeURIComponent(bucket.name)}/o/${encodeURIComponent(dest)}?alt=media&token=${token}`;
   }
-  await s.db.runTransaction(async tx=>{
-    const r=await tx.get(ref);if(!r.exists||r.get('status')!=='pending')fail(409,'처리할 승인 대기 요청이 없습니다.');
-    const v=r.data();const fref=sRef(s,v.facilityId);const old=await tx.get(fref);
-    if(!old.exists)fail(404,'기관이 삭제되거나 없습니다.');
-    if(decision==='approved'){
-      const prior=old.data();
-      if(prior.advertisingStatus==='active'&&[prior.type,prior.region,prior.district].join('|')!==[v.payload.type,v.payload.region,v.payload.district].join('|'))fail(409,'홍보 중인 기관의 유형·소재지 변경은 먼저 계약을 중지하세요.');
-      // 소개글 승인과 사이트 게시 승인은 별개. 안전점검 보류 등 게시상태를 유지합니다.
-      tx.update(fref,{...v.payload,imageUrl:imageUrl||v.payload.imageUrl||prior.imageUrl||'',photoPath:s.FieldValue.delete(),publicationStatus:prior.publicationStatus||'pending',lastConfirmedAt:todayKST(),updatedAt:s.FieldValue.serverTimestamp()});
-    }
-    tx.update(ref,{status:decision,reason,reviewedBy:u.uid,reviewedAt:s.FieldValue.serverTimestamp()});
-  });
-  const req=(await ref.get()).data();const f=await readFacility(s,req.facilityId);
-  await publish(s,f);await audit(s,u.uid,'review_profile',f.id,{id,decision});return {requestId:id,status:decision};
+  let outcome;
+  try{
+    outcome=await s.db.runTransaction(async tx=>{
+      const [r,old]=await Promise.all([tx.get(ref),tx.get(sRef(s,row.facilityId))]);
+      if(!r.exists||r.get('status')!=='pending'||r.get('kind')!=='profile')fail(409,'이미 처리한 변경 요청입니다.');
+      if(!old.exists)fail(404,'기관이 삭제되거나 없습니다.');
+      const request=r.data(),prior={id:old.id,...old.data()};
+      if(decision==='approved'){
+        if(request.schemaVersion!=='2.9.3')fail(409,'이전 양식으로 제출된 수정 요청입니다. 자료 보완을 요청한 뒤 새 양식으로 제출받아 주세요.');
+        const edit=reviewProfileChanges(prior,request);
+        // 유효한 지역·유형·기관명과 HTTPS URL인지 승인 시점에 재검증합니다.
+        const merged=normalizedFacility({...prior,...edit});
+        if(prior.advertisingStatus==='active'&&[prior.type,prior.region,prior.district].join('|')!==[merged.type,merged.region,merged.district].join('|'))
+          fail(409,'홍보 중인 기관의 유형·소재지 변경은 먼저 계약을 중지하세요.');
+        const patch={};for(const key of PROFILE_FIELDS)if(Object.prototype.hasOwnProperty.call(edit,key))patch[key]=merged[key];
+        if(imageUrl)patch.imageUrl=imageUrl;
+        tx.update(sRef(s,row.facilityId),{...patch,lastConfirmedAt:todayKST(),
+          profileVerifiedBy:u.uid,profileVerificationNote:verificationNote,profileVerificationDate:todayKST(),
+          updatedAt:s.FieldValue.serverTimestamp()});
+      }
+      tx.update(ref,{status:decision,reason:decision==='approved'?'관리자 검증 후 반영':reason,
+        verificationNote:decision==='approved'?verificationNote:'',reviewedBy:u.uid,reviewedAt:s.FieldValue.serverTimestamp()});
+      return {facilityId:row.facilityId};
+    });
+  }catch(e){if(copiedFile)await copiedFile.delete({ignoreNotFound:true}).catch(()=>{});throw e;}
+  if(decision==='approved'){
+    const f=await readFacility(s,outcome.facilityId);await publish(s,f);
+  }
+  await audit(s,u.uid,'review_profile',outcome.facilityId,{requestId:id,decision});
+  return {requestId:id,status:decision};
 }
 async function adminApprove(s,u,b){requireAdmin(u);
   const id=txt(b.facilityId,100),value=txt(b.status,30);
@@ -305,9 +447,13 @@ async function setQuota(s,u,b){requireAdmin(u);
 }
 async function getMy(s,u){if(u.role!=='facility')fail(403,'기관 계정이 필요합니다.');
   const f=await readFacility(s,u.facilityId);
-  if(!(f.managerUids||[]).includes(u.uid))fail(403,'기관 연결이 유효하지 않습니다.');return safeFacility(f);
+  if(!belongsToFacility(u,f))fail(403,'승인된 본인 기관 계정이 아니거나 접속이 중지되었습니다.');return safeFacility(f);
 }
-async function getMyAccount(s,u){return {uid:u.uid,role:u.role||'guardian',facilityId:u.facilityId||'',email:u.email||'',displayName:u.name||''};}
+async function getMyAccount(s,u){
+  if(u.role==='admin')requireAdmin(u);
+  if(u.role==='facility')await getMy(s,u);
+  return {uid:u.uid,role:u.role||'guardian',facilityId:u.role==='facility'?u.facilityId:'',email:u.email||'',displayName:u.name||''};
+}
 // 기관 자체점검은 비공개 제출물로 저장합니다. 관리자 검토 없이 공개되지 않습니다.
 async function submitSelfAssessment(s,u,b){
   const f=await getMy(s,u);if(!SUPPORTED_TYPES.includes(f.type))fail(400,'현재 정기 자체점검은 요양병원·요양원에 우선 적용합니다.');
@@ -563,7 +709,7 @@ export async function handler(event){
     const body=method==='POST'?getBody(event):(event.queryStringParameters||{}),action=txt(body.action,60);
     // Netlify branch-deploy는 운영 DB와 환경변수를 공유할 수 있으므로 반드시 읽기 전용.
     // 관리자/기관이라고 해도 지점별 자료수정·입금확인·신청등록을 시험 주소에서는 차단합니다.
-    const stagingReadActions=new Set(['my_account','my_facility','private_quota','private_plan_prices','requests','my_assessment_state','admin_field_state','admin_pending_assessments','admin_list','admin_quotas','facility_order_quote','facility_my_orders','admin_payment_orders','facility_my_analytics','admin_analytics','admin_overview','admin_facility_detail','public_track']);
+    const stagingReadActions=new Set(['my_account','my_facility','private_quota','private_plan_prices','requests','my_assessment_state','admin_field_state','admin_pending_assessments','admin_list','admin_quotas','facility_order_quote','facility_my_orders','admin_payment_orders','facility_my_analytics','admin_analytics','admin_overview','admin_facility_detail','my_access_application','admin_access_applications','public_track']);
     if(process.env.CONTEXT!=='production' && method==='POST' && !stagingReadActions.has(action))fail(403,'시험 배포 사이트는 운영자료 보호를 위해 읽기 전용입니다. 입력 동작은 동봉된 오프라인 미리보기에서 시험하세요.');
     const s=services();
     if(method==='GET'&&action==='public_list')return response(200,{ok:true,items:await listPublic(s,body)});
@@ -572,9 +718,17 @@ export async function handler(event){
     if(method==='POST'&&action==='public_track')return response(200,{ok:true,...await recordPublicVisit(s,event,body)});
 
     const u=await authUser(event,s);
+    // Every protected request is authorized by the server, not by the menu state.
+    if(u.role==='admin')requireAdmin(u);
+    if(u.role==='facility')await getMy(s,u);
     let result;
     switch(action){
       case 'my_account': result=await getMyAccount(s,u);break;
+      case 'my_access_application': result=await myAccessApplication(s,u);break;
+      case 'facility_apply':result=await applyForFacilityAccess(s,u,body);break;
+      case 'admin_access_applications':result=await listAccessApplications(s,u);break;
+      case 'admin_review_access_application':result=await reviewAccessApplication(s,u,body);break;
+      case 'admin_revoke_facility_access':result=await revokeFacilityAccess(s,u,body);break;
       case 'private_quota': result=await privateQuota(s,u,body);break;
       case 'private_plan_prices': {
         if(u.role==='admin')result={prices:getPrivatePrices()};
@@ -612,6 +766,8 @@ export async function handler(event){
       case 'admin_contract':result=await contract(s,u,body);break;
       case 'upload_photo':result=await uploadPhoto(s,u,body);break;
       case 'submit_profile':result=await submitProfile(s,u,body);break;
+      case 'submit_material':result=await submitMaterial(s,u,body);break;
+      case 'review_material':result=await reviewMaterial(s,u,body);break;
       case 'requests':result={items:await listRequests(s,u)};break;
       case 'review_request':result=await reviewProfile(s,u,body);break;
       default:fail(400,'지원하지 않는 요청입니다.');

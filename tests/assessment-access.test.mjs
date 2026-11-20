@@ -7,7 +7,7 @@ const app=readFileSync(new URL('../site/app.js',import.meta.url),'utf8');
 const rules=readFileSync(new URL('../firebase/CI_RULES_MERGE_ONLY.txt',import.meta.url),'utf8');
 test('기관의 자기점검은 담당자 계정으로만 제출',()=>{
   assert.match(api,/async function submitSelfAssessment\(s,u,b\)\{\s*const f=await getMy\(s,u\)/);
-  assert.match(api,/if\(!\(f.managerUids\|\|\[\]\).includes\(u.uid\)\)/);
+  assert.match(api,/if\(!belongsToFacility\(u,f\)\)/);
 });
 test('검토 승인·우려 게시 보류는 관리자 전용',()=>{
  assert.match(api,/async function adminReviewAssessment\(s,u,b\)\{requireAdmin\(u\)/);

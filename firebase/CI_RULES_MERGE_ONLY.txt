@@ -6,6 +6,7 @@ Firestore 운영 규칙 안내
 match /ci_facilities/{doc} { allow read, write: if false; }
 match /ci_public/{doc} { allow read, write: if false; }
 match /ci_users/{doc} { allow read, write: if false; }
+match /ci_access_applications/{doc} { allow read, write: if false; }
 match /ci_requests/{doc} { allow read, write: if false; }
 match /ci_quotas/{doc} { allow read, write: if false; }
 match /ci_audit/{doc} { allow read, write: if false; }

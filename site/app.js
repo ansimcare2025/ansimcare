@@ -14,7 +14,7 @@ const formValue=id=>$(id)?.value?.trim()||'';
 let auth,session={user:null,role:'guest',uid:'',facilityId:''},popup=null,nextPage=null;
 // Firebase가 휴대폰 저장소의 기존 로그인 상태를 복원하는 동안은 재로그인을 요구하지 않습니다.
 let authRestored=false,pendingProtectedPage=null;
-let publicFacilities=[],adminFacilities=[],selectedId='',nextAdminCursor=null,adminRequests=[],fullQuotaRows=[];
+let publicFacilities=[],adminFacilities=[],selectedId='',nextAdminCursor=null,adminRequests=[],fullQuotaRows=[],mineBaseline=null;
 function setMessage(id,msg){if($(id))$(id).textContent=msg;}
 async function call(action,values={},method='POST'){
   const headers={};let url='/.netlify/functions/api',opts={method,cache:'no-store',headers};
@@ -99,7 +99,7 @@ function updateVisitControls(){
 function pageAuthorized(page){
   if(page==='plans')return ['facility','admin'].includes(session.role);
   if(page==='criteria'||page==='admin')return session.role==='admin';
-  if(page==='facility')return ['facility','admin'].includes(session.role);
+  if(page==='facility')return ['facility','admin','guardian'].includes(session.role);
   return true;
 }
 function navigate(page,{fromHistory=false}={}){
@@ -114,7 +114,7 @@ function navigate(page,{fromHistory=false}={}){
   if(page==='plans'&&!['facility','admin'].includes(session.role)){nextPage='plans';openAuth('facility');return;}
   if(page==='criteria'&&session.role!=='admin'){nextPage='criteria';openAuth('admin');return;}
   if(page==='admin'&&session.role!=='admin'){nextPage='admin';openAuth('admin');return;}
-  if(page==='facility'&&!['facility','admin'].includes(session.role)){nextPage='facility';openAuth('facility');return;}
+  if(page==='facility'&&!['facility','admin'].includes(session.role)&&!session.user){nextPage='facility';openAuth('facility');return;}
   // 다른 메뉴를 선택하면 앞으로 이동 기록은 초기화됩니다.
   if(!fromHistory&&page!==visitPages[visitIndex]){
     visitPages.splice(visitIndex+1);
@@ -132,7 +132,7 @@ recordVisit('site_visit');
     if(session.role==='facility')loadMine();
     else if(session.role==='admin')renderAdminFacilityPreview();
   }
-  if(page==='admin'){loadAdmin();loadAdminOverview();loadAssessments();loadAdminPaymentOrders();loadAdminAnalytics();}
+  if(page==='admin'){loadAdmin();loadAdminOverview();loadAssessments();loadAdminPaymentOrders();loadAdminAnalytics();loadAccessApplications();}
   if(page==='plans')loadPrivatePlans();
 }
 // 브라우저/휴대폰의 자체 뒤로가기와 화면 내 화살표가 같은 기록을 사용합니다.
@@ -157,15 +157,15 @@ window.addEventListener('popstate',event=>{
 });
 updateVisitControls();
 document.addEventListener('click',e=>{const b=e.target.closest('[data-page], [data-go]');if(b)navigate(b.dataset.page||b.dataset.go);const l=e.target.closest('[data-login]');if(l)openAuth(l.dataset.login);});
-function openAuth(role='guardian'){$('auth-dialog').showModal();setMessage('auth-feedback',role==='facility'?'카카오 로그인 후 담당자 UID를 관리자에게 전달하여 기관 연결을 요청하세요.':role==='admin'?'관리자 권한이 미리 발급된 계정이어야 합니다.':'카카오 또는 이메일로 로그인할 수 있습니다.');}
+function openAuth(role='guardian'){$('auth-dialog').showModal();setMessage('auth-feedback',role==='facility'?'먼저 카카오로 로그인하여 기관 담당자 접속 신청을 해주세요. 관리자의 소속 확인·승인이 필요합니다.':role==='admin'?'관리자 권한이 미리 발급된 계정이어야 합니다.':'카카오 또는 이메일로 로그인할 수 있습니다.');}
 $('auth-open').onclick=()=>openAuth();$('auth-close').onclick=()=>$('auth-dialog').close();
 $('auth-logout').onclick=async()=>{try{await signOut(auth);navigate('home');}catch(e){alert(e.message)}};
 $('email-login').onclick=async()=>{
-  try{const result=await signInWithEmailAndPassword(auth,formValue('auth-email'),$('auth-password').value);await updateSession(result.user);$('auth-dialog').close();navigate(nextPage&&((nextPage==='plans'&&['facility','admin'].includes(session.role))||(nextPage==='criteria'&&session.role==='admin')||(nextPage==='facility'&&session.role==='admin')||session.role===nextPage)?nextPage:session.role==='admin'?'admin':session.role==='facility'?'facility':'home');nextPage=null;}
+  try{const result=await signInWithEmailAndPassword(auth,formValue('auth-email'),$('auth-password').value);await updateSession(result.user);$('auth-dialog').close();navigate(nextPage&&((nextPage==='plans'&&['facility','admin'].includes(session.role))||(nextPage==='criteria'&&session.role==='admin')||(nextPage==='facility'&&['admin','guardian'].includes(session.role))||session.role===nextPage)?nextPage:session.role==='admin'?'admin':session.role==='facility'?'facility':'home');nextPage=null;}
   catch(e){setMessage('auth-feedback','이메일 로그인 실패: '+(e.code?.startsWith('auth/')?'이메일·비밀번호·인증설정을 확인하세요.':e.message));}
 };
 $('email-reset').onclick=async()=>{if(!formValue('auth-email')){setMessage('auth-feedback','이메일 주소를 먼저 입력하세요.');return;}try{await sendPasswordResetEmail(auth,formValue('auth-email'));setMessage('auth-feedback','계정이 등록된 경우 재설정 메일을 받을 수 있습니다.');}catch{setMessage('auth-feedback','메일 발송 실패: Firebase 이메일 인증 설정을 확인하세요.');}};
-async function kakaoFinish(customToken){await signInWithCustomToken(auth,customToken);await updateSession(auth.currentUser);$('auth-dialog')?.close();navigate(nextPage&&((nextPage==='plans'&&['facility','admin'].includes(session.role))||(nextPage==='criteria'&&session.role==='admin')||(nextPage==='facility'&&session.role==='admin')||session.role===nextPage)?nextPage:session.role==='admin'?'admin':session.role==='facility'?'facility':'home');nextPage=null;}
+async function kakaoFinish(customToken){await signInWithCustomToken(auth,customToken);await updateSession(auth.currentUser);$('auth-dialog')?.close();navigate(nextPage&&((nextPage==='plans'&&['facility','admin'].includes(session.role))||(nextPage==='criteria'&&session.role==='admin')||(nextPage==='facility'&&['admin','guardian'].includes(session.role))||session.role===nextPage)?nextPage:session.role==='admin'?'admin':session.role==='facility'?'facility':'home');nextPage=null;}
 window.addEventListener('message',async e=>{
   if(e.origin!==location.origin||!popup||e.source!==popup)return;
   if(e.data?.type!=='careindex-kakao'||typeof e.data.token!=='string')return;
@@ -181,14 +181,22 @@ $('kakao-login').onclick=()=>{
 async function updateSession(user){
   if(!user){session={user:null,role:'guest',uid:'',facilityId:''};adminFacilities=[];selectedId='';nextAdminCursor=null;setMessage('a-full-detail','관리자 로그인 후 조회할 수 있습니다.');setMessage('a-facilities','관리자 로그인 후 조회할 수 있습니다.');}
   else{
-    const claims=(await user.getIdTokenResult(true)).claims;
-    session={user,uid:user.uid,role:claims.role==='admin'?'admin':claims.role==='facility'?'facility':'guardian',facilityId:claims.facilityId||''};
+    // Ask the server for the authoritative role: never trust client-side claim rendering alone.
+    session={user,uid:user.uid,role:'guardian',facilityId:''};
+    try{
+      await user.getIdToken(true);
+      const verified=await call('my_account',{},'GET');
+      session={user,uid:user.uid,role:['admin','facility'].includes(verified.role)?verified.role:'guardian',facilityId:verified.role==='facility'?verified.facilityId||'':''};
+    }catch(e){setMessage('auth-feedback','관리자·기관 권한 확인이 되지 않아 일반 사용자 모드로 연결했습니다: '+e.message);}
+
   }
   setMessage('user-state',session.user?`${ROLENAME[session.role]} · ${session.uid.length>21?session.uid.slice(0,18)+'…':session.uid}`:'로그인 전');
   $('auth-logout').hidden=!user;$('auth-open').textContent=user?'계정 연결 상태':'로그인';
-  $('institution-entry').textContent=session.role==='admin'?'기관 전용 화면 미리보기 →':session.role==='facility'?'내 기관 화면 열기 →':'기관 전용 로그인 →';
+  $('institution-entry').textContent=session.role==='admin'?'기관 전용 화면 미리보기 →':session.role==='facility'?'내 기관 화면 열기 →':session.role==='guardian'?'기관 담당자 접속 신청 →':'기관 전용 로그인 →';
   if(session.role==='guardian'&&session.user){setMessage('system-state','로그인 완료 · UID: '+session.uid);}else{setMessage('system-state',session.user?ROLENAME[session.role]+' 인증 완료':'참여기관 검색 가능');}
   $('facility-gate').hidden=['facility','admin'].includes(session.role);$('facility-portal').hidden=session.role!=='facility';
+  $('facility-application-panel').hidden=!(session.role==='guardian'&&!!session.user);
+  if(session.role==='guardian'&&session.user)loadOwnAccessApplication();
   $('admin-facility-preview').hidden=session.role!=='admin';
   $('home-admin-card').hidden=session.role!=='admin'; // 보호자 첫 화면에서는 관리자 업무 안내를 노출하지 않습니다.
   $('admin-gate').hidden=session.role==='admin';$('admin-portal').hidden=session.role!=='admin';
@@ -196,7 +204,7 @@ async function updateSession(user){
   document.querySelectorAll('[data-restricted="admin"]').forEach(x=>x.hidden=session.role!=='admin');
   if(!['facility','admin'].includes(session.role))document.querySelectorAll('[data-price-type]').forEach(x=>x.textContent='기관 로그인 후 확인');
   const active=document.querySelector('.page.active')?.id;
-  if((active==='page-admin'&&session.role!=='admin')||(active==='page-facility'&&!['facility','admin'].includes(session.role))||(active==='page-plans'&&!['facility','admin'].includes(session.role))||(active==='page-criteria'&&session.role!=='admin'))navigate('home');
+  if((active==='page-admin'&&session.role!=='admin')||(active==='page-facility'&&!['facility','admin','guardian'].includes(session.role))||(active==='page-plans'&&!['facility','admin'].includes(session.role))||(active==='page-criteria'&&session.role!=='admin'))navigate('home');
 }
 try{
   const firebase=initializeApp(window.CAREINDEX_CONFIG.firebase);auth=getAuth(firebase);
@@ -415,13 +423,26 @@ document.addEventListener('click',async e=>{
 });
 
 // Facility member portal.
+const PROFILE_UI_FIELDS={name:['f-name','기관명'],type:['f-type','기관 유형'],region:['f-region','시·도'],district:['f-district','시·군·구'],phone:['f-phone','대표전화'],address:['f-address','주소'],description:['f-desc','기관 소개'],homepage:['f-homepage','홈페이지']};
+function currentFacilityForm(){return Object.fromEntries(Object.entries(PROFILE_UI_FIELDS).map(([key,[id]])=>[key,formValue(id)]));}
+function facilityForm(prefix){return {name:formValue(prefix+'name'),type:formValue(prefix+'type'),region:formValue(prefix+'region'),district:formValue(prefix+'district'),phone:formValue(prefix+'phone'),address:formValue(prefix+'address'),description:formValue(prefix+'desc'),homepage:formValue(prefix+'homepage'),imageUrl:prefix==='a-'?formValue('a-image'):'',source:prefix==='a-'?formValue('a-source'):'기관 제공',officialId:prefix==='a-'?formValue('a-official'):''};}
+function profileChangedFields(){
+  if(!mineBaseline)return [];
+  const data=currentFacilityForm();return Object.entries(PROFILE_UI_FIELDS).filter(([key])=>String(data[key]||'')!==String(mineBaseline[key]||'')).map(([key,[,label]])=>label);
+}
+function updateProfilePreview(){
+  const changed=profileChangedFields();const hasPhoto=$('f-photo').files.length>0;
+  setMessage('f-change-preview',!mineBaseline?'기관정보 확인 중':changed.length||hasPhoto?`제출 예정: ${[...changed,...(hasPhoto?['사진']:[])].join(', ')}. 관리자 확인 전 공개되지 않습니다.`:'수정된 항목이 없습니다. 필요한 내용만 바꾼 뒤 제출하세요.');
+}
 async function loadMine(){if(session.role!=='facility')return;
   try{
     const r=await call('my_facility'),f=r.facility;
+    mineBaseline=f;
     setMessage('mine-id',f.id);setMessage('mine-approval',f.publicationStatus==='approved'?'게시 승인':'미승인 / 검토 중');setMessage('mine-contract',f.advertisingStatus==='active'?`계약 중 · ${f.contractEnd}`:'광고 미활성');
-    const mapping={'f-name':'name','f-type':'type','f-region':'region','f-phone':'phone','f-address':'address','f-desc':'description','f-homepage':'homepage'};
-    for(const [id,key] of Object.entries(mapping))if($(id)&&f[key])$(id).value=f[key];
+    for(const [key,[id]] of Object.entries(PROFILE_UI_FIELDS))if($(id))$(id).value=f[key]||'';
     optionDistrict('f-region','f-district',f.district);
+    setMessage('f-current-summary',`현재 등록: ${f.name||'-'} · ${f.region||''} ${f.district||''} · ${f.type||'-'} · 대표전화 ${f.phone||'미등록'} · 게시 ${f.publicationStatus==='approved'?'승인':'검토 중'}. 아래의 수정내용은 별도 요청으로 저장됩니다.`);
+    updateProfilePreview();
     await refreshRequests();await loadSelfAssessmentState();await loadPaymentQuote();await loadMyPaymentOrders();await loadFacilityAnalytics();
   }catch(e){setMessage('f-feedback','기관정보 연결 오류: '+e.message);}
 }
@@ -431,11 +452,42 @@ async function uploadImage(file,facilityId){
   const content=await new Promise((resolve,reject)=>{const fr=new FileReader();fr.onload=()=>resolve(fr.result);fr.onerror=reject;fr.readAsDataURL(file);});
   const imageData=String(content).split(',')[1];const r=await call('upload_photo',{facilityId,mime:file.type,imageData});return r.photoPath;
 }
-$('f-photo').onchange=()=>{const f=$('f-photo').files[0];setMessage('photo-preview',f?`선택한 사진: ${f.name} (${Math.round(f.size/1024)}KB)`:'');};
-function facilityForm(prefix){return {name:formValue(prefix+'name'),type:formValue(prefix+'type'),region:formValue(prefix+'region'),district:formValue(prefix+'district'),phone:formValue(prefix+'phone'),address:formValue(prefix+'address'),description:formValue(prefix+'desc'),homepage:formValue(prefix+'homepage'),imageUrl:prefix==='a-'?formValue('a-image'):'',source:prefix==='a-'?formValue('a-source'):'기관 제공',officialId:prefix==='a-'?formValue('a-official'):''};}
-$('f-submit').onclick=async()=>{const btn=$('f-submit');btn.disabled=true;setMessage('f-feedback','승인 신청을 제출하고 있습니다.');try{const file=$('f-photo').files[0];const photoPath=await uploadImage(file,session.facilityId);const r=await call('submit_profile',{facility:facilityForm('f-'),photoPath});setMessage('f-feedback','관리자 승인 대기로 저장되었습니다. 요청 ID: '+r.requestId);$('f-photo').value='';await refreshRequests();}catch(e){setMessage('f-feedback','제출 실패: '+e.message);}finally{btn.disabled=false;}};
-async function refreshRequests(){if(!['facility','admin'].includes(session.role))return;try{const r=await call('requests');adminRequests=r.items||[];if(session.role==='facility')renderMyRequests();if(session.role==='admin')renderAdminRequests();}catch(e){setMessage(session.role==='admin'?'a-requests':'my-requests','변경 요청을 불러오지 못했습니다: '+e.message);}}
-function renderMyRequests(){setMessage('my-requests',adminRequests.length?'':'아직 제출된 요청이 없습니다.');if(!adminRequests.length)return;$('my-requests').innerHTML=adminRequests.map(r=>`<div class="review"><strong>${esc(r.createdAt?.slice(0,10)||'')} · ${esc(r.status)}</strong><p>${esc(r.payload?.name||'기관정보 변경')}</p><p>${esc(r.reason||'')}</p></div>`).join('');}
+$('f-photo').onchange=()=>{const f=$('f-photo').files[0];setMessage('photo-preview',f?`선택한 사진: ${f.name} (${Math.round(f.size/1024)}KB)`:'');updateProfilePreview();};
+$('f-submit').onclick=async()=>{
+  if(!$('f-confirm').checked)return setMessage('f-feedback','기관 제출자료의 검토·승인 절차를 확인하고 체크해 주세요.');
+  if(!profileChangedFields().length&&!$('f-photo').files.length)return setMessage('f-feedback','수정된 항목이나 사진이 없습니다.');
+  const btn=$('f-submit');btn.disabled=true;setMessage('f-feedback','수정 자료를 관리자에게 제출하는 중입니다.');
+  try{
+    const photoPath=await uploadImage($('f-photo').files[0],session.facilityId);
+    const r=await call('submit_profile',{facility:currentFacilityForm(),photoPath,referenceNote:formValue('f-reference-note')});
+    setMessage('f-feedback',`관리자 검토 대기 · 요청번호: ${r.requestId}. 현재 공개정보는 그대로 유지됩니다.`);
+    $('f-photo').value='';$('f-confirm').checked=false;$('f-reference-note').value='';await refreshRequests();updateProfilePreview();
+  }catch(e){setMessage('f-feedback','제출 실패: '+e.message);}finally{btn.disabled=false;}
+};
+$('f-material-send').onclick=async()=>{
+  const button=$('f-material-send');button.disabled=true;
+  try{const r=await call('submit_material',{title:formValue('f-material-title'),description:formValue('f-material-desc')});
+    setMessage('f-material-feedback','관리자에게 자료가 전달되었습니다. 접수번호: '+r.requestId);$('f-material-title').value='';$('f-material-desc').value='';await refreshRequests();
+  }catch(e){setMessage('f-material-feedback','전달 실패: '+e.message);}finally{button.disabled=false;}
+};
+for(const [key,[id]] of Object.entries(PROFILE_UI_FIELDS)){
+  $(id)?.addEventListener('input',updateProfilePreview);
+  $(id)?.addEventListener('change',()=>{if(id==='f-region')setTimeout(updateProfilePreview,0);else updateProfilePreview();});
+}
+async function refreshRequests(){if(!['facility','admin'].includes(session.role))return;try{
+  const r=await call('requests');adminRequests=r.items||[];
+  if(session.role==='facility')renderMyRequests();if(session.role==='admin')renderAdminRequests();
+}catch(e){setMessage(session.role==='admin'?'a-requests':'my-requests','요청 내역을 불러오지 못했습니다: '+e.message);}}
+const PROFILE_FIELD_LABELS={name:'기관명',type:'기관 유형',region:'시·도',district:'시·군·구',phone:'대표전화',address:'주소',description:'기관 소개',homepage:'홈페이지'};
+const STATUS_LABELS={pending:'관리자 확인 대기',approved:'확인 후 반영 완료',rejected:'보완 요청',reviewed:'자료 확인 완료'};
+function renderMyRequests(){
+  setMessage('my-requests',adminRequests.length?'':'아직 제출된 요청이 없습니다.');if(!adminRequests.length)return;
+  $('my-requests').innerHTML=adminRequests.map(r=>{
+    const fields=Array.isArray(r.changedFields)?r.changedFields.map(x=>PROFILE_FIELD_LABELS[x]||x):[];
+    const title=r.kind==='material'?r.payload?.title||'참고자료':(fields.join(', ')||'기관정보 수정');
+    return `<div class="review"><strong>${esc(r.createdAt?.slice(0,10)||'')} · ${esc(STATUS_LABELS[r.status]||r.status)}</strong><p>${esc(title)}</p><p class="smallprint">${esc(r.reason||'')} · ${esc(r.kind==='material'?'담당자 전달자료':'공개 반영은 관리자 최종 확인 후')}</p></div>`;
+  }).join('');
+}
 
 // 기관별 6개월 자기점검. 고객·환자 식별정보를 입력받지 않습니다.
 $('self-check-fields').innerHTML=ASSESSMENT_DOMAINS.map(([id,name,desc],i)=>`<div class="assessment-row"><label for="self-${esc(id)}"><strong>${i+1}. ${esc(name)}</strong><small>${esc(desc)}</small></label><select id="self-${esc(id)}" aria-label="${esc(name)} 자체점검 상태"><option value="미확인">미확인</option><option value="양호">기관 자체점검 양호</option><option value="보완중">보완중</option><option value="우려">안전·인권 우려 / 즉시 검토 요청</option></select></div>`).join('');
@@ -550,16 +602,44 @@ document.addEventListener('click',e=>{const btn=e.target.closest('[data-select-f
 $('a-new').onclick=()=>{selectedId='';setMessage('a-selected','신규 기관');setMessage('a-full-detail','신규 등록 화면입니다. 기관 저장 후 상세정보를 확인할 수 있습니다.');for(const id of ['a-name','a-phone','a-address','a-desc','a-homepage','a-image','a-official'])$(id).value='';$('a-source').value='직접 확인';setMessage('a-save-message','신규 기관은 비공개 후보로 등록됩니다.');renderAdmin();};
 $('a-save').onclick=async()=>{const btn=$('a-save');btn.disabled=true;try{const r=await call('admin_save_facility',{facilityId:selectedId,facility:facilityForm('a-')});setMessage('a-save-message',`기관 저장 완료: ${r.facility.id} (공개 여부는 계약·승인 조건으로 결정)`);await loadAdmin();if(!adminFacilities.find(f=>f.id===r.facility.id)){adminFacilities.unshift(r.facility);renderAdmin();}selectFacility(r.facility.id);await loadAdminOverview();}catch(e){setMessage('a-save-message','저장 실패: '+e.message);}finally{btn.disabled=false;}};
 document.addEventListener('click',async e=>{const b=e.target.closest('[data-approve]');if(!b)return;if(!selectedId){alert('먼저 기관을 선택하세요.');return;}const st=b.dataset.approve;if(!confirm(st==='approved'?'기관정보의 사실·공개권한을 확인했고 게시 승인하시겠습니까?':'기관 게시 상태를 변경할까요?'))return;try{await call('admin_approve',{facilityId:selectedId,status:st});await loadAdmin();if(!adminFacilities.find(f=>f.id===selectedId)){const d=await call('admin_facility_detail',{facilityId:selectedId});adminFacilities.unshift(d.facility);}selectFacility(selectedId);await loadAdminOverview();await loadPublic();}catch(err){alert('승인상태 변경 실패: '+err.message);}});
-$('a-link').onclick=async()=>{if(!selectedId)return alert('먼저 기관을 선택하세요.');const uid=formValue('a-uid');if(!uid)return alert('담당자 UID를 입력하세요.');if(!confirm('UID를 확인하고 선택된 기관의 관리 권한을 부여하시겠습니까?'))return;try{await call('admin_link_uid',{facilityId:selectedId,uid});alert('기관 담당자 연결 성공. 담당자가 로그아웃 후 다시 로그인하면 새 권한이 적용됩니다.');}catch(e){alert('권한 연결 실패: '+e.message);}};
-$('a-issue-email').onclick=async()=>{if(!selectedId)return alert('기관을 선택하세요.');if(!confirm('담당자 이메일 계정과 임시 비밀번호를 발급하시겠습니까?'))return;try{const r=await call('admin_issue_email',{facilityId:selectedId,email:formValue('a-email')});setMessage('a-credential-output',`기관 ID: ${r.facilityId||selectedId}\n담당자 UID: ${r.uid}\n이메일: ${r.email}\n임시 비밀번호: ${r.temporaryPassword}\n\n비밀번호는 다시 조회할 수 없습니다. 안전하게 전달하세요.`);}catch(e){alert('계정 발급 실패: '+e.message);}};
+$('a-link').onclick=async()=>{if(!selectedId)return alert('먼저 기관을 선택하세요.');const uid=formValue('a-uid');if(!uid)return alert('담당자 UID를 입력하세요.');if(!confirm('UID를 확인하고 선택된 기관의 관리 권한을 부여하시겠습니까?'))return;const verificationNote=prompt('기관 대표번호로 확인한 담당자 권한 검증방법 및 확인일 (8자 이상):','');if(verificationNote===null)return;try{await call('admin_link_uid',{facilityId:selectedId,uid,verified:true,verificationNote});alert('기관 담당자 연결 성공. 담당자가 로그아웃 후 다시 로그인하면 새 권한이 적용됩니다.');}catch(e){alert('권한 연결 실패: '+e.message);}};
+$('a-revoke').onclick=async()=>{
+  if(!selectedId)return alert('먼저 기관을 선택하세요.');
+  const uid=formValue('a-uid');if(!uid)return alert('해제할 담당자의 UID를 입력하세요.');
+  if(location.hostname.includes('--'))return alert('시험 브랜치에서는 실제 계정 연결을 해제하지 않습니다.');
+  if(!confirm('선택 기관에 연결된 이 담당자의 접속권한을 해제하고 로그인을 만료시키겠습니까?'))return;
+  try{await call('admin_revoke_facility_access',{facilityId:selectedId,uid});alert('기관 접속권한을 해제했습니다.');await loadAdmin();}
+  catch(e){alert('권한 해제 실패: '+e.message);}
+};
+$('a-issue-email').onclick=async()=>{if(!selectedId)return alert('기관을 선택하세요.');if(!confirm('담당자 이메일 계정과 임시 비밀번호를 발급하시겠습니까?'))return;const verificationNote=prompt('기관 대표번호로 확인한 담당자 권한 검증방법 및 확인일 (8자 이상):','');if(verificationNote===null)return;try{const r=await call('admin_issue_email',{facilityId:selectedId,email:formValue('a-email'),verified:true,verificationNote});setMessage('a-credential-output',`기관 ID: ${r.facilityId||selectedId}\n담당자 UID: ${r.uid}\n이메일: ${r.email}\n임시 비밀번호: ${r.temporaryPassword}\n\n비밀번호는 다시 조회할 수 없습니다. 안전하게 전달하세요.`);}catch(e){alert('계정 발급 실패: '+e.message);}};
 async function changeContract(command){if(!selectedId)return alert('먼저 기관을 선택하세요.');if(command==='activate'&&!$('a-paid').checked)return alert('수납을 확인했다면 체크박스에 동의 표시하세요.');if(!confirm(command==='activate'?'실제 입금·계약 서류를 확인했고 유료 홍보를 시작하시겠습니까?':'이 기관의 홍보 노출 상태를 변경하시겠습니까?'))return;
   try{const r=await call('admin_contract',{facilityId:selectedId,command,start:formValue('a-start'),end:formValue('a-end'),paymentConfirmed:$('a-paid').checked,reference:formValue('a-reference')});setMessage('a-contract-message',`계약 ${command} 완료 · 현재 공개 ${r.visible?'예':'아니오'} · 정원 ${r.capacity}곳`);await loadAdmin();if(!adminFacilities.find(f=>f.id===selectedId)){const d=await call('admin_facility_detail',{facilityId:selectedId});adminFacilities.unshift(d.facility);}selectFacility(selectedId);await loadAdminOverview();await loadPublic();}catch(e){setMessage('a-contract-message','계약 처리 실패: '+e.message);}}
 $('a-activate').onclick=()=>changeContract('activate');$('a-suspend').onclick=()=>changeContract('suspend');$('a-end-contract').onclick=()=>changeContract('end');
 $('a-refresh-requests').onclick=refreshRequests;
 function renderAdminRequests(){
-  $('a-requests').innerHTML=adminRequests.length?adminRequests.map(r=>`<div class="review"><strong>${esc(r.payload?.name||'기관정보 요청')}</strong> · ${esc(r.status)}<div class="smallprint">${esc(r.facilityId)} · ${esc(r.authorUid)} · ${esc(r.createdAt?.slice(0,16))}</div><p>${esc(r.payload?.description||'')}</p>${r.status==='pending'?`<div class="flex"><button class="btn btn-primary btn-sm" data-review="${esc(r.id)}" data-decision="approved">내용 승인</button><button class="btn btn-outline btn-sm" data-review="${esc(r.id)}" data-decision="rejected">반려</button></div>`:''}</div>`).join(''):'<div class="empty">등록된 기관 수정 요청이 없습니다.</div>';
+  $('a-requests').innerHTML=adminRequests.length?adminRequests.map(r=>{
+    const isMaterial=r.kind==='material',keys=Array.isArray(r.changedFields)?r.changedFields:Object.keys(r.payload||{}).filter(k=>k in PROFILE_FIELD_LABELS);
+    const comparison=keys.map(k=>`<tr><th>${esc(PROFILE_FIELD_LABELS[k]||k)}</th><td>${esc(Object.prototype.hasOwnProperty.call(r.baseValues||{},k)?(r.baseValues[k]||'(없음)'):'기존값은 선택 기관에서 확인')}</td><td>${esc(r.payload?.[k]||'(비움)')}</td></tr>`).join('');
+    const content=isMaterial?`<h4>${esc(r.payload?.title||'전달자료')}</h4><p>${esc(r.payload?.description||'')}</p>`:`<details class="request-comparison"><summary>제출 전·후 항목 비교 (${keys.length}개 변경${r.payload?.photoPath?' + 사진 포함':''})</summary><div class="request-table-wrap"><table class="request-diff"><thead><tr><th>항목</th><th>기존 정보</th><th>기관 제출안</th></tr></thead><tbody>${comparison||'<tr><td colspan="3">사진 변경만 요청</td></tr>'}</tbody></table></div><p class="hintline">참고 메모: ${esc(r.referenceNote||'없음')}</p></details>`;
+    return `<div class="review"><strong>${esc(isMaterial?'참고자료':'정보 변경 요청')} · ${esc(STATUS_LABELS[r.status]||r.status)}</strong><div class="smallprint">기관 ${esc(r.facilityId)} · 요청자 ${esc(r.authorUid)} · ${esc(r.createdAt?.slice(0,16))}</div>${content}${r.status==='pending'?`<div class="flex"><button class="btn btn-primary btn-sm" data-review="${esc(r.id)}" data-decision="${isMaterial?'reviewed':'approved'}" data-kind="${isMaterial?'material':'profile'}">${isMaterial?'자료 확인 완료':'자료 확인 후 최종 반영'}</button><button class="btn btn-outline btn-sm" data-review="${esc(r.id)}" data-decision="rejected" data-kind="${isMaterial?'material':'profile'}">보완 요청</button></div>`:''}${r.reason?`<p class="smallprint">관리자 처리: ${esc(r.reason)}</p>`:''}</div>`;
+  }).join(''):'<div class="empty">기관 제출자료가 없습니다.</div>';
 }
-document.addEventListener('click',async e=>{const b=e.target.closest('[data-review]');if(!b)return;const status=b.dataset.decision;const reason=status==='rejected'?prompt('반려 사유를 입력하세요:','자료 보완 요청'):'관리자 확인 완료';if(reason===null)return;if(!confirm('기관 제출 내용 '+(status==='approved'?'승인':'반려')+'을 확정하시겠습니까?'))return;try{await call('review_request',{requestId:b.dataset.review,decision:status,reason});await refreshRequests();await loadAdmin();await loadPublic();}catch(e){alert('검토 처리 실패: '+e.message);}});
+document.addEventListener('click',async e=>{
+  const b=e.target.closest('[data-review]');if(!b)return;
+  const decision=b.dataset.decision,material=b.dataset.kind==='material';
+  const request=adminRequests.find(x=>x.id===b.dataset.review);
+  if(!request)return alert('요청내역을 다시 불러오세요.');
+  let reason='',verificationNote='',verified=false;
+  if(decision==='rejected'||material)reason=prompt(decision==='rejected'?'반려 또는 보완요청 사유 (4자 이상):':'자료 확인 결과 메모 (4자 이상):','');
+  else{
+    if(!confirm('기존 정보와 기관 제출안을 비교하고 기관의 공식 경로로 사실 확인하셨습니까? 미확인 정보라면 취소하세요.'))return;
+    verificationNote=prompt('확인 방법·근거·확인일을 입력하세요 (10자 이상). 예: 공식 대표번호 전화 확인, 2026-11-20','');verified=true;
+  }
+  if(reason===null||verificationNote===null)return;
+  if(!confirm(material?'기관 전달자료의 처리 상태만 변경합니다. 공개정보는 변하지 않습니다. 계속할까요?':decision==='approved'?'이 변경 내용을 운영 관리자 책임으로 최종 확정하겠습니까?':'반려하고 기관에 보완을 요청하시겠습니까?'))return;
+  try{await call(material?'review_material':'review_request',{requestId:b.dataset.review,decision,reason,verificationNote,verified});await refreshRequests();await loadAdmin();if(!material&&decision==='approved')await loadPublic();}
+  catch(err){alert('검토 처리 실패: '+err.message);}
+});
 
 async function adminQuotaPreview(){try{const r=await call('private_quota',{region:formValue('a-q-region'),district:formValue('a-q-district'),type:formValue('a-q-type')},'GET');$('a-q-cap').value=r.capacity;setMessage('a-q-feedback',`${r.region} ${r.district} ${r.type}: 정원 ${r.capacity}, 현재 계약 ${r.active}, 잔여 ${r.remaining}`);}catch(e){setMessage('a-q-feedback',e.message);}}
 $('a-q-preview').onclick=adminQuotaPreview;
@@ -682,3 +762,58 @@ $('a-field-publish').onclick=async()=>{
 // Only public approved paid institutions are requested at start.
 loadPublic();
 recordVisit('site_visit');
+
+
+// [v2.9.2] No one may self-assign administrator or institution rights from the browser.
+function setApplyDistrict(){optionDistrict('apply-region','apply-district');}
+$('apply-region').addEventListener('change',setApplyDistrict);setApplyDistrict();
+async function loadOwnAccessApplication(){
+  if(!session.user||session.role!=='guardian')return;
+  try{
+    const r=await call('my_access_application',{},'GET'),v=r.application;
+    if(v?.status==='pending')setMessage('apply-status','기관 접수 완료 · 관리자 소속 확인 및 승인 대기 중입니다.');
+    else if(v?.status==='approved')setMessage('apply-status','기관 접속 승인 완료 · 로그아웃 후 다시 로그인해 주세요.');
+    else if(v?.status==='rejected')setMessage('apply-status','이전 신청 반려: '+(v.reason||'운영자에게 문의해 주세요.')+' · 수정 후 재신청할 수 있습니다.');
+    else if(v?.status==='revoked')setMessage('apply-status','기관 접속권한이 중지되었습니다. 관리자에게 확인해 주세요.');
+  }catch(e){setMessage('apply-status','신청 상태를 확인하지 못했습니다: '+e.message);}
+}
+$('apply-submit').onclick=async()=>{
+  if(!session.user||session.role!=='guardian')return alert('카카오로 로그인한 일반 사용자만 신규 신청할 수 있습니다.');
+  if(location.hostname.includes('--'))return setMessage('apply-status','시험 주소에서는 운영 데이터 보호를 위해 접수 저장이 차단되어 있습니다. 정식 운영 전 별도 테스트 환경에서 검증하세요.');
+  const btn=$('apply-submit');btn.disabled=true;
+  try{
+    const r=await call('facility_apply',{facilityName:formValue('apply-facility-name'),applicantName:formValue('apply-applicant-name'),
+      region:formValue('apply-region'),district:formValue('apply-district'),type:formValue('apply-type'),
+      contactPhone:formValue('apply-contact'),consent:$('apply-consent').checked});
+    setMessage('apply-status',r.notice||'접수 완료 · 관리자 승인 대기');
+  }catch(e){setMessage('apply-status','신청 실패: '+e.message);}finally{btn.disabled=false;}
+};
+async function loadAccessApplications(){
+  if(session.role!=='admin')return;
+  try{
+    const r=await call('admin_access_applications',{},'GET');
+    $('a-access-applications').innerHTML=(r.items||[]).length?r.items.map(v=>`<article class="review">
+      <strong>${esc(v.facilityName)}</strong> <span class="pill">${esc(v.status)}</span>
+      <div class="smallprint">${esc(v.region)} ${esc(v.district)} · ${esc(v.type)} · ${esc(v.applicantName)} · ${esc(v.contactPhone)}<br>신청 UID ${esc(v.uid)}</div>
+      ${v.status==='pending'?`<div class="flex"><button class="btn btn-primary btn-sm" type="button" data-access-approve="${esc(v.uid)}">소속 확인 후 선택 기관에 승인</button><button class="btn btn-outline btn-sm" type="button" data-access-reject="${esc(v.uid)}">반려</button></div>`:''}
+    </article>`).join(''):'<div class="empty">담당자 권한 신청이 없습니다.</div>';
+  }catch(e){setMessage('a-access-applications','신청 조회 실패: '+e.message);}
+}
+$('a-access-refresh').onclick=loadAccessApplications;
+document.addEventListener('click',async e=>{
+  const approve=e.target.closest('[data-access-approve]'),reject=e.target.closest('[data-access-reject]');if(!approve&&!reject)return;
+  const uid=approve?.dataset.accessApprove||reject.dataset.accessReject;
+  const decision=approve?'approved':'rejected';
+  if(approve&&!selectedId)return alert('먼저 위 관리자 기관검색에서 해당 기관을 정확히 선택하세요.');
+  if(location.hostname.includes('--'))return alert('시험 배포에서는 계정 승인·반려를 저장하지 않습니다.');
+  let reason='',verified=false;
+  if(approve){
+    if(!confirm('선택 기관의 대표번호로 소속과 권한을 독립 확인하셨습니까? 확인하지 않았다면 취소하세요.'))return;
+    verified=true;reason=prompt('기관 대표번호 확인 등 검증 방법과 확인일을 구체적으로 기록하세요 (8자 이상):','');
+  }else reason=prompt('반려 사유를 입력하세요 (4자 이상):','');
+  if(reason===null)return;
+  try{await call('admin_review_access_application',{applicantUid:uid,facilityId:approve?selectedId:'',decision,reason,verified});
+    alert(approve?'기관 접속만 승인했습니다. 정보 게시·유료 계약은 승인되지 않았습니다.':'담당자 신청을 반려했습니다.');
+    await loadAccessApplications();if(approve)await loadAdmin();
+  }catch(err){alert('처리 실패: '+err.message);}
+});

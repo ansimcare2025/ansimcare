@@ -3,7 +3,7 @@ const app=readFileSync(new URL('../site/app.js',import.meta.url),'utf8');
 const html=readFileSync(new URL('../site/index.html',import.meta.url),'utf8');
 const css=readFileSync(new URL('../site/ui-fixes.css',import.meta.url),'utf8');
 test('관리자 기관용 화면은 별도 읽기 전용이고 관리자 화면으로 강제전환하지 않음',()=>{
- assert.match(app,/if\(page==='facility'\)return \['facility','admin'\]\.includes/);
+ assert.match(app,/if\(page==='facility'\)return \['facility','admin','guardian'\]\.includes/);
  assert.doesNotMatch(app,/if\(page==='facility'&&session\.role==='admin'\)page='admin'/);
  assert.match(html,/id="admin-facility-preview"/);assert.match(app,/renderAdminFacilityPreview/);
 });

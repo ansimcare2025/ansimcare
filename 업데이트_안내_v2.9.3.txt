@@ -1,0 +1,54 @@
+돌봄지음 호남 v2.9.3 — 기관 제출 · 관리자 최종 승인 구조
+기준: v2.9.2 (담당자 가입 승인/서버 계정권한 보완)
+작성: 2026-11-20
+
+[사업 운영 규칙]
+- 기관 담당자: 관리자가 접속 권한을 승인한 계정으로 자기 기관만 접근.
+  기관정보 조회, 변경 제안, 홍보성과, 계약신청 현황, 6개월 자체 점검, 참고자료(텍스트) 전달.
+- 돌봄지음 관리자: 실제 자료 독립 확인 → 검증 근거/확인일 기록 → 게시정보 최종 반영.
+- 기관 직원은 기존 ci_facilities / ci_public 문서를 직접 고치거나 게시할 권한이 없음.
+- 기관 접속 승인, 기관정보 게시 승인, 유료 홍보 계약 승인 분리 유지.
+- 관리자 최종 내용 검증과 공개 반영은 기존 게시 승인·계약·안전보류 조건을 유지.
+
+[변경된 코드]
+1) netlify/functions/_shared/profile-policy.mjs (신규)
+   - 기관 수정요청은 변경 필드만 보관. 공식 식별번호·자료출처·계약 상태·관리자 UID는 수정대상에서 제외.
+   - 관리자가 승인할 때 제출 당시의 기존 값과 현재 값을 다시 비교: 중간 변경 시 409 충돌로 승인 차단.
+2) netlify/functions/api.mjs
+   - submit_profile은 수정분만 저장, 본문·사진은 비공개 요청. 관리자 최종 승인 전 공개DB 변경 없음.
+   - submit_material: 기관이 비식별 참고내용을 비공개로 전달 (문서 첨부 기능 아님).
+   - review_material: 관리자는 내용 확인/보완요청만 처리; 공개DB 불변.
+   - review_request: 관리자만 처리, 독립 확인 여부와 10자 이상 검증근거 요구.
+   - 구형 변경 양식 요청은 신규 양식으로 다시 제출해야 승인 가능(기존정보 보호).
+   - 동일기관 대기 요청 수 상한: 프로필 5건, 참고자료 10건.
+3) site/index.html · site/app.js · site/ui-fixes.css
+   - 기관: 현재 정보 안내, 편집 중 바뀐 필드 표시, 제출 확인 체크, 자료 전달 메모, 제출 기록.
+   - 관리자: 기관별 제출한 필드를 기존값과 비교, 최종 확인 메모 입력 및 검토 처리.
+4) tests/profile-approval.test.mjs 신규, package.json 2.9.3.
+
+[무엇이 아직 없는가]
+- 실제 PDF/워드 파일 첨부 및 관리자 열람은 구현하지 않았습니다. 사진(JPG/PNG/WebP, 1.8MB 이하)은 기존 코드의 비공개 업로드 및 승인 흐름을 사용합니다.
+- 기관 담당자·관리자 로그인은 기존 Firebase / Netlify 환경변수에 의존합니다.
+- 실제 PC/모바일 카카오 로그인, 승인/반려/권한회수, Firestore·Storage 읽기 권한의 운영 환경 통합시험이 필요합니다.
+- 기존 v2.9.1의 Netlify API 오류는 이 코드만으로 해결된 것이 아닙니다. Functions 로그/환경변수 점검이 필요합니다.
+
+[시험 배포 방법]
+1. 기존 GitHub repository의 dolbom-v25-test 브랜치가 맞는지 확인하세요.
+2. 'GitHub업로드용_변경파일.zip'을 PC에서 압축 해제하세요.
+3. 압축 안의 site, netlify, tests 폴더 및 package.json을 기존 동일 경로에 덮어씌우세요.
+4. 'Commit changes'를 눌러 시험 브랜치에만 반영합니다. Compare & pull request/운영 배포는 하지 마세요.
+5. Netlify branch deploy 결과와 주소 https://dolbom-v25-test--careindex-honam.netlify.app/ 를 확인하세요.
+6. 시험 브랜치는 안전을 위해 기존 운영 Firebase에 대한 글쓰기를 금지합니다. 이 주소에서 실제 계정/자료신청/승인은 저장되지 않습니다.
+7. 인증·승인 통합시험이 필요하면 별도 스테이징 Firebase 프로젝트/Netlify 배포를 구성하세요. 운영 데이터 사용 금지.
+
+[관리자 보안 선행 조건 — v2.9.2와 동일]
+- Netlify CI_ADMIN_UIDS: 허용된 Firebase 관리자 UID 목록을 환경변수에 설정.
+- Firebase custom claim role=admin과 CI_ADMIN_UIDS 양쪽 통과해야 관리자 접근.
+- 서비스 계정 FIREBASE_SERVICE_ACCOUNT_JSON을 Netlify 환경변수로 설정. 비밀키는 GitHub ZIP에 포함하면 안 됩니다.
+- Firestore 직접쓰기 금지 규칙과 Firebase Storage 규칙(비공개 대기자료 접근권한)을 별도로 검증하세요.
+- 실제 기관 담당자 승인은 기관 공식대표번호 등 독립 경로로 소속·위임 확인 후 처리합니다.
+
+[시험 결과]
+- npm run check : 통과
+- npm test : 77개 통과
+- 외부 Firebase 계정/서버 실사용 검증: 미실시

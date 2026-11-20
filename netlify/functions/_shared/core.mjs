@@ -3,6 +3,7 @@ import { initializeApp, cert, getApps } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import { regions, types, getPrivatePrices, defaultCap, dateOK, todayKST, visible } from './business-rules.mjs';
+import {adminUidAllowed} from './access-policy.mjs';
 export { regions, types, getPrivatePrices, defaultCap, dateOK, todayKST, visible } from './business-rules.mjs';
 
 export function fail(status,message){const e=new Error(message);e.statusCode=status;throw e;}
@@ -36,7 +37,14 @@ export async function authUser(event,s){
   if(!m)fail(401,'로그인이 필요합니다.');
   try{return await s.auth.verifyIdToken(m[1],true);}catch{fail(401,'로그인이 만료되었거나 인증이 유효하지 않습니다.');}
 }
-export function requireAdmin(u){if(u.role!=='admin')fail(403,'관리자 권한이 없습니다.');}
+export function requireAdmin(u){
+  if(u.role!=='admin')fail(403,'관리자 권한이 없습니다.');
+  // UID allowlist plus signed Firebase admin custom claim: both conditions required.
+  // Fail closed if roster missing. Never ship UIDs to the site HTML or GitHub.
+  const roster=process.env.CI_ADMIN_UIDS||process.env.ADMIN_UID||'';
+  if(!roster)fail(503,'관리자 UID 허용목록(CI_ADMIN_UIDS) 설정이 필요합니다.');
+  if(!adminUidAllowed(u.uid,roster))fail(403,'등록된 관리자 계정이 아닙니다.');
+}
 export function ensureLocation(region,district){if(!regions[region]?.includes(district))fail(400,'시·군·구를 정확히 지정하세요. 전주시는 완산구/덕진구를 구분해야 합니다.');}
 export function ensureType(type){if(!types.includes(type))fail(400,'지원하지 않는 기관 유형입니다.');}
 export function key(region,district,type){return createHash('sha256').update([region,district,type].join('|')).digest('hex').slice(0,24);}
