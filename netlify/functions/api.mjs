@@ -54,6 +54,15 @@ async function listAdmin(s,p){
   if(filter.district&&(!filter.region||!regions[filter.region].includes(filter.district)))fail(400,'검색할 시·군·구를 확인하세요.');
   if(filter.type&&!types.includes(filter.type))fail(400,'검색할 기관 유형을 확인하세요.');
   const col=s.db.collection('ci_facilities');
+  // 전체 기관명 Enter 검색은 우선 단일 필드 색인을 이용해 정확한 이름부터 찾습니다.
+  // 부분 이름은 아래의 전체검색으로 자동 대체합니다.
+  if(p.preferExactName && filter.query && !filter.after && !filter.region && !filter.district && !filter.type){
+    const exactName=txt(p.keyword,100);
+    try{
+      const exact=await col.where('name','==',exactName).limit(filter.pageSize).get();
+      if(!exact.empty)return {items:exact.docs.map(d=>safeFacility({id:d.id,...d.data()})),next:'',scanned:exact.size,partial:false,exact:true};
+    }catch(e){console.warn('Admin name index lookup fallback',e.code||e.message);}
+  }
   // 필터 없이 불러올 때는 가볍게 1페이지만 조회합니다.
   if(!filter.query&&!filter.region&&!filter.district&&!filter.type){
     let q=col.orderBy('__name__').limit(filter.pageSize);
@@ -64,8 +73,13 @@ async function listAdmin(s,p){
   // 예전에 등록된 약 3,800개 기관에는 검색 색인이 없으므로, 관리자만 전체 문서를 스캔해 검색합니다.
   // 최대 6,000개 문서씩 검사하고 다음 커서를 제공하여 향후 기관 수 증가에도 검색이 가능합니다.
   const found=[];let last=filter.after,scanned=0,exhausted=false;
+  // 단일 필드 색인으로 먼저 지역을 줄입니다. 기존 기관코드/명칭 부분 검색도 유지합니다.
+  // 복합 색인 생성을 요구하지 않도록 시·군·구가 지정되면 district 하나만 선필터합니다.
+  let narrowed=col;
+  if(filter.district)narrowed=col.where('district','==',filter.district);
+  else if(filter.region)narrowed=col.where('region','==',filter.region);
   while(found.length<filter.pageSize&&scanned<6000){
-    let q=col.orderBy('__name__').limit(400);
+    let q=narrowed.orderBy('__name__').limit(400);
     if(last)q=q.startAfter(last);
     const snap=await q.get();
     if(snap.empty){exhausted=true;break;}
@@ -81,10 +95,14 @@ async function listAdmin(s,p){
 }
 async function adminOverview(s,u){requireAdmin(u);
   const col=s.db.collection('ci_facilities');
-  const [all,active,pending]=await Promise.all([
+  // 별도 집계 중 한 항목이 실패해도 관리자 전체검색은 계속 이용할 수 있어야 합니다.
+  const results=await Promise.allSettled([
     col.count().get(),col.where('advertisingStatus','==','active').count().get(),col.where('publicationStatus','==','pending').count().get()
   ]);
-  return {total:all.data().count||0,active:active.data().count||0,pending:pending.data().count||0,notice:'관리자 전용 전체 기관 집계. 비공개 후보 포함.'};
+  const values=results.map(x=>x.status==='fulfilled'?x.value.data().count:null);
+  const partial=results.some(x=>x.status!=='fulfilled');
+  if(partial)console.warn('Admin overview partial count failure',results.map((x,i)=>x.status==='rejected'?`${i}:${x.reason?.code||x.reason?.message}`:'ok').join(','));
+  return {total:values[0],active:values[1],pending:values[2],partial,notice:'관리자 전용 전체 기관 집계. 비공개 후보 포함.'};
 }
 async function adminFacilityDetail(s,u,b){requireAdmin(u);
   const id=txt(b.facilityId,90);if(!id)fail(400,'기관 ID가 필요합니다.');

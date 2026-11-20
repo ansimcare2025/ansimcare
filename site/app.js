@@ -190,6 +190,7 @@ async function updateSession(user){
   if(session.role==='guardian'&&session.user){setMessage('system-state','로그인 완료 · UID: '+session.uid);}else{setMessage('system-state',session.user?ROLENAME[session.role]+' 인증 완료':'참여기관 검색 가능');}
   $('facility-gate').hidden=['facility','admin'].includes(session.role);$('facility-portal').hidden=session.role!=='facility';
   $('admin-facility-preview').hidden=session.role!=='admin';
+  $('home-admin-card').hidden=session.role!=='admin'; // 보호자 첫 화면에서는 관리자 업무 안내를 노출하지 않습니다.
   $('admin-gate').hidden=session.role==='admin';$('admin-portal').hidden=session.role!=='admin';
   document.querySelectorAll('[data-restricted="plan"]').forEach(x=>x.hidden=!['facility','admin'].includes(session.role));
   document.querySelectorAll('[data-restricted="admin"]').forEach(x=>x.hidden=session.role!=='admin');
@@ -217,21 +218,65 @@ try{
   if(code){history.replaceState(visitState(visitPages[visitIndex],visitIndex),'',location.pathname+location.search);kakaoFinish(code).catch(e=>alert('카카오 로그인 연결 실패: '+e.message));}
 }catch(e){console.error('Firebase init',e);setMessage('system-state','Firebase 초기화 실패');}
 
-// Public listing: never render private/imported records, even if the client includes local CSVs.
-async function loadPublic(){
-  setMessage('directory-status','유료 홍보 참여기관을 확인하고 있습니다.');
+// 공개용 기본명단은 별도 JSON 파일에서 기관명·유형·지역·기준일만 가져옵니다.
+// Firebase의 비공개 후보·연락처·관리자 메모는 직접 제공하지 않습니다.
+let basicDirectory=null,basicDirectoryError='',basicPage=0;
+const BASIC_PAGE_SIZE=24;
+const matchedBasicDirectory=()=>{
+  const region=formValue('match-region'),district=formValue('match-district'),type=formValue('match-type'),kw=formValue('match-keyword').toLocaleLowerCase('ko');
+  return (basicDirectory||[]).filter(f=>(region==='전체'||f.region===region)&&(district==='전체'||f.district===district)&&(type==='전체'||f.type===type)&&(!kw||f.name.toLocaleLowerCase('ko').includes(kw)||f.district.toLocaleLowerCase('ko').includes(kw)));
+};
+async function ensureBasicDirectory(){
+  if(basicDirectory||basicDirectoryError)return;
   try{
-    const data=await call('public_list',{region:formValue('match-region'),district:formValue('match-district'),type:formValue('match-type'),keyword:formValue('match-keyword')},'GET');
-    publicFacilities=data.items||[];renderPublic();setMessage('directory-status','유료 계약·게시 승인·계약기간이 확인된 기관만 표시합니다.');
-  }catch(e){publicFacilities=[];renderPublic();setMessage('directory-status','검색 서버 확인 필요: '+e.message);}
+    const r=await fetch('./public-directory.json?v=20261120',{cache:'force-cache'});
+    if(!r.ok)throw Error('기관 기본명단 파일 응답 '+r.status);
+    const d=await r.json();
+    if(!Array.isArray(d.items))throw Error('기관 기본명단 형식 오류');
+    basicDirectory=d.items;
+  }catch(e){basicDirectoryError=e.message||'파일을 불러올 수 없습니다.';}
+}
+function renderBasicDirectory(){
+  const results=matchedBasicDirectory(),total=results.length,maxPage=Math.max(0,Math.ceil(total/BASIC_PAGE_SIZE)-1);
+  basicPage=Math.min(basicPage,maxPage);
+  const segment=results.slice(basicPage*BASIC_PAGE_SIZE,(basicPage+1)*BASIC_PAGE_SIZE);
+  $('basic-directory-status').textContent=basicDirectoryError?'기본명단 조회 오류: '+basicDirectoryError:basicDirectory?`${total.toLocaleString('ko-KR')}곳의 과거 기본명단이 검색되었습니다. 실재·현재 운영 여부는 별도 확인이 필요합니다.`:'공공자료 기관명을 불러오고 있습니다.';
+  $('basic-directory-list').innerHTML=segment.length?segment.map(f=>`<article class="basic-directory-row"><span class="basic-directory-symbol" aria-hidden="true">⌂</span><div><strong>${esc(f.name)}</strong><small>${esc(f.region)} ${esc(f.district)} · ${esc(f.type)} · 기준 ${esc(f.asOf)}</small></div><span class="basic-directory-tag">기본명단</span></article>`).join(''):'<div class="empty">이 조건의 기본 기관명을 찾지 못했습니다. 다른 지역·유형이나 기관명 일부로 검색해 주세요.</div>';
+  $('basic-prev').hidden=basicPage===0;
+  $('basic-next').hidden=basicPage>=maxPage;
+  $('basic-page-note').textContent=total?`${basicPage+1} / ${maxPage+1}쪽 · ${total.toLocaleString('ko-KR')}곳`:'검색 결과 없음';
+  setMessage('match-count',`${publicFacilities.length}곳 광고 · ${total.toLocaleString('ko-KR')}곳 기본명단`);
+}
+$('basic-prev').onclick=()=>{basicPage=Math.max(0,basicPage-1);renderBasicDirectory();};
+$('basic-next').onclick=()=>{basicPage++;renderBasicDirectory();};
+let publicSearchRequestId=0;
+async function loadPublic(){
+  const requestId=++publicSearchRequestId;basicPage=0;publicFacilities=[];
+  setMessage('directory-status','새 조건으로 기본 기관명과 상세 홍보기관을 검색하는 중입니다.');
+  $('facility-results').innerHTML='<div class="empty">상세 홍보기관을 확인하고 있습니다…</div>';
+  renderBasicDirectory();
+  // Promise rejection을 먼저 수습하고, 유료 서버 장애 시에도 기본명단은 정상 표시합니다.
+  const paidTask=call('public_list',{region:formValue('match-region'),district:formValue('match-district'),type:formValue('match-type'),keyword:formValue('match-keyword')},'GET');
+  const [paidResult]=await Promise.allSettled([paidTask,ensureBasicDirectory()]);
+  if(requestId!==publicSearchRequestId)return;
+  if(paidResult.status==='fulfilled'){
+    publicFacilities=paidResult.value.items||[];renderPublic();
+    setMessage('directory-status',`상세 홍보 ${publicFacilities.length}곳, 기본명단 ${matchedBasicDirectory().length.toLocaleString('ko-KR')}곳 · 두 목록의 의미는 다릅니다.`);
+  }else{
+    publicFacilities=[];renderPublic();
+    setMessage('directory-status','상세 홍보기관 조회가 일시적으로 원활하지 않습니다. 기본 기관명은 아래에서 검색할 수 있습니다. ('+paidResult.reason.message+')');
+  }
 }
 function renderPublic(){
-  setMessage('match-count',publicFacilities.length+'곳');
-  $('facility-results').innerHTML=publicFacilities.length?publicFacilities.map(f=>`<article class="fac-card"><div class="fac-photo">${f.imageUrl&&/^https:\/\//.test(f.imageUrl)?`<img src="${esc(f.imageUrl)}" alt="${esc(f.name)} 제공 사진" loading="lazy">`:'⌂'}<span class="adflag" style="position:absolute;top:12px;left:12px">유료 광고</span></div><div class="fac-card-body"><div class="badge-line"><span class="pill">${esc(f.type)}</span><span class="pill">${esc(f.region)} · ${esc(f.district)}</span></div><h3>${esc(f.name)}</h3><div class="smallprint">${esc(f.address||'주소는 기관에 문의하세요.')}</div><p>${esc(f.description||'기관 소개를 확인 중입니다.')}</p><button class="btn btn-outline btn-sm" data-public-detail="${esc(f.id)}">기관 정보·확인 질문 보기</button></div></article>`).join(''):'<div class="empty">현재 조건에 유료 홍보 참여기관이 없습니다. 실제 기관이 없다는 뜻은 아닙니다. 지역을 넓혀 다시 검색하거나 공적 기관 검색 서비스도 함께 확인하세요.</div>';
+  $('facility-results').innerHTML=publicFacilities.length?publicFacilities.map(f=>`<article class="fac-card"><div class="fac-photo">${f.imageUrl&&/^https:\/\//.test(f.imageUrl)?`<img src="${esc(f.imageUrl)}" alt="${esc(f.name)} 제공 사진" loading="lazy">`:'⌂'}<span class="adflag" style="position:absolute;top:12px;left:12px">유료 광고</span></div><div class="fac-card-body"><div class="badge-line"><span class="pill">${esc(f.type)}</span><span class="pill">${esc(f.region)} · ${esc(f.district)}</span></div><h3>${esc(f.name)}</h3><div class="smallprint">${esc(f.address||'주소는 기관에 문의하세요.')}</div><p>${esc(f.description||'기관 소개를 확인 중입니다.')}</p><button class="btn btn-outline btn-sm" data-public-detail="${esc(f.id)}">기관 정보·확인 질문 보기</button></div></article>`).join(''):'<div class="empty">현재 조건에 게시 승인된 유료 홍보 참여기관이 없습니다. 아래 공공자료 기본명단과는 구분해 주세요.</div>';
+  renderBasicDirectory();
 }
 $('search-submit').onclick=loadPublic;
+for(const id of ['match-region','match-district','match-type'])$(id).addEventListener('change',loadPublic);
 $('search-reset').onclick=()=>{for(const id of ['match-region','match-type'])$(id).value='전체';optionDistrict('match-region','match-district');$('match-keyword').value='';loadPublic();};
-$('match-keyword').addEventListener('keydown',e=>{if(e.key==='Enter')loadPublic();});
+$('match-keyword').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();loadPublic();}});
+// 서비스 첫 화면에서 기관명을 입력하면 로그인 절차 없이 공개 검색으로 이동합니다.
+$('hero-directory-search').addEventListener('submit',e=>{e.preventDefault();$('match-region').value='전체';optionDistrict('match-region','match-district');$('match-type').value='전체';$('match-keyword').value=$('hero-directory-keyword').value.trim();navigate('match');});
 function showPublicDetail(id){
   const f=publicFacilities.find(x=>x.id===id);if(!f)return;
   $('detail-content').innerHTML=`<div class="kicker">PAID PARTICIPATING PROVIDER</div><h2>${esc(f.name)}</h2><div class="adflag">유료 홍보 참여기관 · 공적 인증 아님</div>${f.imageUrl&&/^https:\/\//.test(f.imageUrl)?`<img class="detail-img" src="${esc(f.imageUrl)}" alt="${esc(f.name)} 제공 사진">`:''}<dl><dt>유형·지역</dt><dd>${esc(f.type)} · ${esc(f.region)} ${esc(f.district)}</dd><dt>주소</dt><dd>${esc(f.address||'기관에 문의')}</dd><dt>대표전화</dt><dd>${esc(f.phone||'기관에 문의')}${f.phone&&f.phone.replace(/[^+0-9]/g,'').length>=8?` <a class="btn btn-primary btn-sm" href="tel:${esc(f.phone.replace(/[^+0-9]/g,''))}" data-track-call="${esc(f.id)}">전화 연결</a>`:''}</dd><dt>기관 소개</dt><dd>${esc(f.description||'정보 업데이트 예정')}</dd><dt>정보 확인일</dt><dd>${esc(f.lastConfirmedAt||'직접 확인 필요')}</dd>${f.homepage&&/^https:\/\//.test(f.homepage)?`<dt>홈페이지</dt><dd><a target="_blank" rel="noopener noreferrer" href="${esc(f.homepage)}">기관 홈페이지 열기</a></dd>`:''}</dl><h3>방문 전 확인 질문</h3><ul class="list"><li>오늘 현재 입소·입원이 가능한가요?</li><li>보험 적용 후 예상 월 비용과 추가 비용은?</li><li>야간 인력·응급상황·보호자 연락 방식은?</li><li>면회·송영·인지 활동은 어떻게 운영되나요?</li></ul><p class="smallprint">위 소개·사진은 기관이 제공하거나 관리자 확인을 거친 홍보 정보이며, 의료적 적합성 또는 공적 평가 결과를 의미하지 않습니다.</p>`;
@@ -413,11 +458,23 @@ function renderAdminFacilityPreview(){
 // Administrative portal. The backend checks the admin custom claim on EVERY request.
 let adminSearchState={keyword:'',region:'',district:'',type:''},adminSearchRequestId=0;
 async function loadAdminOverview(){if(session.role!=='admin')return;
-  try{const r=await call('admin_overview');setMessage('a-total',r.total.toLocaleString('ko-KR'));setMessage('a-active',r.active.toLocaleString('ko-KR'));setMessage('a-pending',r.pending.toLocaleString('ko-KR'));}
-  catch(e){setMessage('a-total','조회 오류');setMessage('a-search-notice','전체 집계 조회 실패: '+e.message);}
+  try{
+    const r=await call('admin_overview');
+    for(const [key,id] of [['total','a-total'],['active','a-active'],['pending','a-pending']]){
+      setMessage(id,Number.isInteger(r[key])?r[key].toLocaleString('ko-KR'):'—');
+    }
+    setMessage('a-overview-notice',r.partial?'일부 집계 항목은 현재 확인할 수 없습니다. 아래 기관 검색은 별도로 작동합니다.':'전체 등록기관 집계 완료 · 비공개 후보 포함');
+  }catch(e){
+    for(const id of ['a-total','a-active','a-pending'])setMessage(id,'—');
+    setMessage('a-overview-notice','전체 집계 일시 오류: '+e.message+' · 아래 기관명 검색을 계속 이용할 수 있습니다.');
+  }
 }
 async function loadAdmin(reset=true){if(session.role!=='admin')return;
-  if(reset){nextAdminCursor=null;adminFacilities=[];}
+  if(reset){
+    nextAdminCursor=null;adminFacilities=[];
+    setMessage('a-facilities','변경된 지역·기관 유형으로 전체 등록기관을 조회하고 있습니다…');
+    $('a-more').hidden=true;
+  }
   const requestId=++adminSearchRequestId;
   setMessage('a-search-notice','전체 등록기관에서 검색하는 중입니다.');
   try{
@@ -429,17 +486,28 @@ async function loadAdmin(reset=true){if(session.role!=='admin')return;
     setMessage('a-search-notice',`현재 ${adminFacilities.length.toLocaleString('ko-KR')}곳 표시 · ${nextAdminCursor?'결과가 더 있습니다. [다음 결과]를 누르세요.':'현재 조건의 마지막 결과입니다.'}${r.partial?' 일부 자료는 계속 검색해야 합니다.':''} · 보호자에게 비공개인 기관도 포함`);
     renderAdmin();
     if(reset)await refreshRequests();
-  }catch(e){if(requestId===adminSearchRequestId)setMessage('a-search-notice','기관 검색 실패: '+e.message);}
+  }catch(e){if(requestId===adminSearchRequestId){
+    setMessage('a-search-notice','기관 검색 실패: '+e.message);
+    setMessage('a-facilities','검색 서버 오류가 발생했습니다. 조건을 확인한 뒤 다시 검색해 주세요.');
+  }}
 }
 function renderAdmin(){
   $('a-facilities').innerHTML=adminFacilities.map(f=>`<div class="admin-entry ${selectedId===f.id?'selected':''}"><div><strong>${esc(f.name)}</strong><small>${esc(f.id)} · ${esc(f.region)} ${esc(f.district)} · ${esc(f.type)} · 게시 ${esc(f.publicationStatus)} · 광고 ${esc(f.advertisingStatus)}</small></div><button class="btn btn-outline btn-sm" data-select-fac="${esc(f.id)}">선택</button></div>`).join('')||'<div class="empty">현재 조건에 표시할 기관이 없습니다. 다른 지역이나 검색어로 다시 찾아보세요.</div>';
   $('a-more').hidden=!nextAdminCursor;
 }
 function setAdminDistricts(){optionDistrict('a-filter-region','a-filter-district');}
-function runAdminSearch(){adminSearchState={keyword:formValue('a-filter'),region:formValue('a-filter-region'),district:formValue('a-filter-district'),type:formValue('a-filter-type')};loadAdmin(true);}
+function runAdminSearch({allRegions=false}={}){
+  adminSearchState={keyword:formValue('a-filter'),region:allRegions?'':formValue('a-filter-region'),district:allRegions?'':formValue('a-filter-district'),type:allRegions?'':formValue('a-filter-type'),preferExactName:allRegions};
+  if(allRegions){setMessage('a-enter-hint','기관명 Enter 검색: 선택된 지역·유형과 관계없이 전체 지역에서 기관명을 찾습니다. 검색 버튼을 누르면 지역 필터가 다시 적용됩니다.');}
+  loadAdmin(true);
+}
 $('a-refresh').onclick=()=>{runAdminSearch();loadAdminOverview();};
 $('a-search').onclick=runAdminSearch;
-$('a-filter').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();runAdminSearch();}};
+// 관리자도 유형·지역을 바꾸면 전체 DB에 새 조건을 즉시 적용합니다.
+for(const id of ['a-filter-region','a-filter-district','a-filter-type']){
+  $(id).addEventListener('change',runAdminSearch);
+}
+$('a-filter').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();runAdminSearch({allRegions:!!formValue('a-filter')});}};
 $('a-search-reset').onclick=()=>{$('a-filter').value='';$('a-filter-region').value='';setAdminDistricts();$('a-filter-type').value='';runAdminSearch();};
 $('a-more').onclick=()=>{if(nextAdminCursor)loadAdmin(false);};
 function renderAdminDetails(f){const fields=[

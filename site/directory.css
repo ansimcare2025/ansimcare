@@ -1,0 +1,27 @@
+/* 돌봄지음 호남 v2.9 — 기본명단과 유료 상세홍보 분리, 간편 검색 */
+.hero-quick-search{margin-top:18px;padding:19px 23px;border:1px solid #d5e6d9;background:#fff;border-radius:17px;box-shadow:0 8px 22px #12371e0a}
+.hero-quick-search label{display:block;font-size:15px;color:#194a32;font-weight:850;margin-bottom:8px}
+.hero-quick-input{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:9px}
+.hero-quick-input input{width:100%;min-width:0;padding:11px 14px;border:1px solid #cdded0;border-radius:11px;font:inherit;min-height:47px}
+.hero-quick-input .btn{min-height:47px}
+.hero-quick-search>p{margin:9px 0 0;font-size:11px;color:#5d7364}
+.directory-disclaimer{background:#eff8f1!important;color:#315d46!important;border-color:#c7e4cb!important;border-left-color:#4d9465!important}
+.search-result-section{margin-top:26px}
+.search-section-title{padding:0 2px 12px}
+.search-section-title h3{display:flex;align-items:center;flex-wrap:wrap;gap:9px;margin:0 0 5px;font-size:18px}
+.search-section-title p{font-size:12px;color:#617367;margin:0;line-height:1.65}
+.basic-directory-section{padding-top:13px;border-top:1px solid #d9e6dc}
+.basic-directory-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:12px}
+.basic-directory-row{display:flex;align-items:center;gap:10px;padding:14px;border:1px solid #dbe5de;border-radius:14px;background:#fff;min-width:0}
+.basic-directory-symbol{display:grid;place-items:center;flex:0 0 34px;width:34px;height:34px;background:#e8f2e9;border-radius:11px;color:#416f50;font-size:17px}
+.basic-directory-row>div{flex:1;min-width:0}
+.basic-directory-row strong{display:block;font-size:13px;color:#183a2b;overflow-wrap:anywhere}
+.basic-directory-row small{display:block;color:#687f6e;font-size:10px;line-height:1.5;margin-top:3px}
+.basic-directory-tag{font-size:10px;color:#66806a;border:1px solid #e1eae2;border-radius:50px;padding:3px 7px;white-space:nowrap}
+.basic-pager{display:flex;align-items:center;justify-content:center;gap:14px;flex-wrap:wrap;margin:17px 0 10px}
+#a-overview-notice{padding:10px 13px;background:#f2f7f2;border:1px solid #e2ece3;border-radius:10px;margin:9px 0 17px}
+#a-enter-hint{margin:8px 0 0;line-height:1.6}
+@media(max-width:760px){.hero-quick-search{padding:16px;border-radius:16px}.hero-quick-input{grid-template-columns:1fr}.basic-directory-grid{grid-template-columns:1fr}.basic-directory-tag{font-size:9px}.basic-directory-row{padding:12px}}
+
+.portal-grid:has(#home-admin-card[hidden]){grid-template-columns:repeat(2,minmax(0,1fr))}
+@media(max-width:760px){.portal-grid:has(#home-admin-card[hidden]){grid-template-columns:1fr}}
